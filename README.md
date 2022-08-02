@@ -14,8 +14,9 @@ generation
 application/json
 
 - Better handling on browser opening and
-code retrieval (I like the way github
-dektop does it)
+code retrieval (I'd like to use protocol
+handlers but implementing on many platforms
+seems hard)
 
 - Serialization of OAuth and saving/opening
 functionality.
