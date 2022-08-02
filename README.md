@@ -24,7 +24,7 @@ functionality.
 - IMPORTANT Access token refresh functionality
 using the refresh token.
 
-- RELEVANT Simplification of the codebase to
+- UNIMPORTANT Simplification of the codebase to
 remove the use of tiny-json and
 (if possible) libmicrohttpd
 
