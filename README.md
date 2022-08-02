@@ -1,11 +1,11 @@
 # anisync-oauth
-Minimal C oauth 2.0 authentication ilbrary using libcurl and libmicrohttpd
+# Minimal C oauth 2.0 authentication ilbrary using libcurl and libmicrohttpd
 
 This library is heavily insipred by https://github.com/slugonamission/OAuth2
 but aims to add extra missing functionality like handle browser opening/code retrieval,
 access token refresh, state saving, etc.
 
-Missing functionality
+# Missing functionality
 
 - Correct PKCE code_challenge and code_verifier
 generation
@@ -27,6 +27,6 @@ using the refresh token.
 remove the use of tiny-json and
 (if possible) libmicrohttpd
 
-Contributing
+# Contributing
 
 Any contribution is welcome and should be done through a pull request.
