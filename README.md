@@ -7,24 +7,24 @@ access token refresh, state saving, etc.
 
 ### Missing functionality
 
-- Correct PKCE code_challenge and code_verifier
+- IMPORTANT Correct PKCE code_challenge and code_verifier
 generation
 
-- Handling on auth callback different than
+- RELEVANT Handling on auth callback different than
 application/json
 
-- Better handling on browser opening and
+- UNIMPORTANT Better handling on browser opening and
 code retrieval (I'd like to use protocol
 handlers but implementing on many platforms
 seems hard)
 
-- Serialization of OAuth and saving/opening
+- IMPORTANT Serialization of OAuth and saving/opening
 functionality.
 
-- Access token refresh functionality
+- IMPORTANT Access token refresh functionality
 using the refresh token.
 
-- Simplification of the codebase to
+- RELEVANT Simplification of the codebase to
 remove the use of tiny-json and
 (if possible) libmicrohttpd
 
