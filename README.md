@@ -7,8 +7,8 @@ access token refresh, state saving, etc.
 
 ### Missing functionality
 
-- IMPORTANT Correct PKCE code_challenge and code_verifier
-generation
+- RELEVANT Fix wrong termination on code_challenge after
+hash generation (base64 encoding works fine)
 
 - RELEVANT Handling on auth callback different than
 application/json
