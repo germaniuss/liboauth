@@ -279,8 +279,8 @@ int oauth_save(OAuth* oauth, const char* dir, const char* name) {
 int main() {
     srand(time(NULL));
     OAuth* oauth = oauth_create();
-    oauth_load(oauth, "", "MAL");
+    oauth_load(oauth, "", "TEST");
     oauth_start(oauth);
-    oauth_save(oauth, "", "MAL");
+    oauth_save(oauth, "", "TEST");
     oauth_delete(oauth);
 }
