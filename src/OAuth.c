@@ -94,8 +94,10 @@ bool oauth_gen_challenge(OAuth* oauth, const char* code_challenge_method) {
     } else if (!strcmp(oauth->code_challenge_method, "S256")) {
         oauth->code_verifier = base64_url_random(32);
         uint8_t hash[32];
+        char hash_string[65];
         calc_sha_256(hash, oauth->code_verifier, strlen(oauth->code_verifier));
-        oauth->code_challenge = base64_url_encode(hash);
+        hash_to_string(hash_string, hash);
+        oauth->code_challenge = base64_url_encode(hash_string);
         return true;
     } return false;
 }

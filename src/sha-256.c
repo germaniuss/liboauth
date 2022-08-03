@@ -220,3 +220,11 @@ void calc_sha_256(uint8_t hash[SIZE_OF_SHA_256_HASH], const void *input, size_t 
 	sha_256_write(&sha_256, input, len);
 	(void)sha_256_close(&sha_256);
 }
+
+void hash_to_string(char string[65], const uint8_t hash[32])
+{
+	size_t i;
+	for (i = 0; i < 32; i++) {
+		string += sprintf(string, "%02x", hash[i]);
+	}
+}
