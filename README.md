@@ -7,6 +7,9 @@ access token refresh, state saving, etc.
 
 ### Missing functionality
 
+- IMPORTANT Access token refresh functionality
+using the refresh token.
+
 - RELEVANT Handling on auth callback different than
 application/json
 
@@ -14,9 +17,6 @@ application/json
 code retrieval (I'd like to use protocol
 handlers but implementing on many platforms
 seems hard)
-
-- IMPORTANT Access token refresh functionality
-using the refresh token.
 
 - UNIMPORTANT Simplification of the codebase to
 remove the use of tiny-json and
