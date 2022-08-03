@@ -57,6 +57,13 @@ char const* json_getPropertyValue( json_t const* obj, char const* property ) {
 	return json_getValue( field );
 }
 
+const char* json_getValueWrap(const json_t* parent, const char* key) {
+    if ( parent == NULL ) return NULL;
+    json_t const* key_param = json_getProperty( parent, key);
+    if ( key_param == NULL ) return NULL;
+    return json_getValue( key_param );
+}
+
 /* Internal prototypes: */
 static char* goBlank( char* str );
 static char* goNum( char* str );

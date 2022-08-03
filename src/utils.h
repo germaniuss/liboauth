@@ -1,10 +1,15 @@
 #pragma once
-#include <curl/curl.h>
-#include <microhttpd.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <curl/curl.h>
+#include <microhttpd.h>
+
+#include "base64.h"
+#include "sha-256.h"
 #include "tiny-json.h"
+#include "ht.h"
 
 #define MAX_BUFFER 4096 //4KB Buffers
 
@@ -53,8 +58,8 @@ static PLATFORM platform = ANDROID;
 static PLATFORM platform = LINUX;
 #endif
 
-const char* json_value(const json_t* parent, const char* key);
-char* strdupex(const char* str, size_t val);
+char* strdupex(const char* str, int val);
+char * trim(char * s);
 int openBrowser(const char* url);
 
 // THIS IS RELATED TO REQUESTS
@@ -89,21 +94,5 @@ size_t process_response(void *ptr, size_t size, size_t nmemb, void *userdata);
 
 // THIS IS ALL RELATED TO HEADER AND DATA
 
-typedef struct request_data {
-    char* key;
-    char* value;
-    struct request_data* next;
-    struct request_data* last;
-} request_data;
-
-request_data* request_data_create();
-void request_data_append(request_data* data, const char* key, const char* value);
-request_data* request_data_copy(request_data* data);
-void request_data_clean(request_data* d);
-
-struct curl_slist* parseHeader(request_data* header);
-char* parseData(request_data* data, const char* join);
-
-// Base 64 encoding stuff
-char* base64_url_random(size_t size);
-char* base64_url_encode(const char *plain);
+struct curl_slist* parseHeader(ht* header);
+char* parseData(ht* data, const char* join);

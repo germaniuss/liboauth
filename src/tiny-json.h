@@ -74,6 +74,8 @@ typedef struct json_s {
   *         This property is always unnamed and its type is JSON_OBJ. */
 json_t const* json_create( char* str, json_t mem[], unsigned int qty );
 
+const char* json_getValueWrap(const json_t* parent, const char* key);
+
 /** Get the name of a json property.
   * @param json A valid handler of a json property.
   * @retval Pointer to null-terminated if property has name.

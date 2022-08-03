@@ -1,23 +1,9 @@
-#pragma once
-#include <curl/curl.h>
 #include "utils.h"
 
 typedef struct OAuth {
-    char* client_id;
-    char* client_secret;
-    char* redirect_uri;
-    char* code_challenge_method;
-    char* code_challenge;
-    char* code_verifier;
-    char* code;
-    char* expires_in;
-    char* access_token;
-    char* refresh_token;
-    char* token_type;
-    char* baseAuthURL;
-    char* baseTokenURL;
-    request_data* header;
-    request_data* data;
+    ht* params;
+    ht* header;
+    ht* data;
     int authed;
 } OAuth;
 
@@ -36,6 +22,9 @@ response_data* oauth_post_token(OAuth* oauth, const char* baseTokenURL, const ch
 
 void oauth_start(OAuth* oauth, const char* baseAuthURL, const char* baseTokenURL, const char* code_challenge_method);
 
-void oauth_set_header(OAuth* oauth, request_data* header);
-void oauth_set_data(OAuth* oauth, request_data* data);
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, request_data* header, request_data* data);
+void oauth_set_header(OAuth* oauth, ht* header);
+void oauth_set_data(OAuth* oauth, ht* data);
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, ht* header, ht* data);
+
+int oauth_load(OAuth* oauth, const char* dir, const char* name);
+int oauth_save(OAuth* oauth, const char* dir, const char* name);

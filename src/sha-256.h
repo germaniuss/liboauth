@@ -49,6 +49,8 @@ struct Sha_256 {
  */
 void calc_sha_256(uint8_t hash[SIZE_OF_SHA_256_HASH], const void *input, size_t len);
 
+void hash_to_string(char string[65], const uint8_t hash[32]);
+
 /*
  * @brief Initialize a SHA-256 streaming calculation.
  * @param sha_256 A pointer to a SHA-256 structure.

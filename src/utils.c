@@ -1,23 +1,21 @@
-#pragma once
-#include <curl/curl.h>
-#include <microhttpd.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include "tiny-json.h"
 #include "utils.h"
+#include <ctype.h>
 
-const char* json_value(const json_t* parent, const char* key) {
-    if ( parent == NULL ) {fprintf(stderr, "Invalid json response\n"); return NULL;}
-    json_t const* key_param = json_getProperty( parent, key);
-    if ( key_param == NULL ) {fprintf(stderr, "Invalid json response\n"); return NULL;}
-    return json_getValue( key_param );
+char* strdupex(const char* str, int val) {
+    char* aux = (char*) malloc(strlen(str) + val + 1);
+    int shrink = (val < 0) ? val : 0;
+    memcpy(aux, str, strlen(str) + 1 + shrink);
+    aux[strlen(str) + shrink] = '\0';
+    return aux;
 }
 
-char* strdupex(const char* str, size_t val) {
-    char* aux = (char*) malloc(strlen(str) + val + 1);
-    memcpy(aux, str, strlen(str) + 1);
-    return aux;
+char * trim(char * s) {
+    int l = strlen(s);
+    while(isspace(s[l - 1])) --l;
+    while(* s && isspace(* s)) ++s, --l;
+    if (s[0] == '\0') l = 0;
+    l -= strlen(s);
+    return strdupex(s, l);
 }
 
 int openBrowser(const char* url) {
@@ -170,117 +168,35 @@ size_t process_response(void *ptr, size_t size, size_t nmemb, void *userdata) {
 
 // THIS IS ALL RELATED TO HEADER AND DATA
 
-request_data* request_data_create() {
-    request_data* data = (request_data*) malloc(sizeof(request_data));
-    data->key = NULL;
-    data->value = NULL;
-    data->next = NULL;
-    data->last = data;
-    return data;
-}
-
-void request_data_append(request_data* data, const char* key, const char* value) {
-    data->last->next = (request_data*) malloc(sizeof(request_data));
-    data->last = data->last->next;
-    data->last->key = strdupex(key, 0);
-    data->last->value = strdupex(value, 0);
-    data->last->next = NULL;
-}
-
-request_data* request_data_copy(request_data* data) {
-    request_data* iter = data;
-    request_data* newdata = iter ? request_data_create() : NULL;
-    while (iter->next) {
-        request_data_append(newdata, iter->next->key, iter->next->value);
-        iter = iter->next;
-    } return newdata;
-}
-
-void request_data_clean(request_data* d) {
-    request_data* pd;
-    while(d) {
-        free(d->key);
-        free(d->value);
-        pd = d->next;
-        free(d);
-        d = pd;
-    }
-}
-
-struct curl_slist* parseHeader(request_data* header) {
+struct curl_slist* parseHeader(ht* header) {
     struct curl_slist *list = NULL;
-    request_data* iter = header;
-    while (iter->next) {
-        char* data_str = strdupex("", strlen(iter->next->key) + strlen(iter->next->value) + 1);
-        strcpy(data_str, iter->next->key);
+    hti iter = ht_iterator(header);
+    while (ht_next(&iter)) {
+        char* data_str = strdupex(iter.key, strlen(iter.value) + 1);
         strcat(data_str, "=");
-        strcat(data_str, iter->next->value);
+        strcat(data_str, iter.value);
         list = curl_slist_append(list, data_str);
         free(data_str);
-        iter = iter->next;
     } return list;
 }
 
-char* parseData(request_data* data, const char* join) {
+char* parseData(ht* data, const char* join) {
     
     // Get the length of the final string
     int len = 0;
-    request_data* iter = data;
-    while (iter->next) {
+    hti iter = ht_iterator(data);
+    while (ht_next(&iter)) {
         if (len != 0) len += strlen(join);
-        len += strlen(iter->next->key) + strlen(iter->next->value) + 1;
-        iter = iter->next;
-    } if (len < 0) len = 0; 
+        len += strlen(iter.key) + strlen(iter.value) + 1;
+    } if (len < 0) len = 0;
     char* data_str = strdupex("", len);
 
     // Concatenate all strings
-    iter = data;
-    while (iter->next) {
+    iter = ht_iterator(data);
+    while (ht_next(&iter)) {
         if (data_str[0] != '\0') strcat(data_str, join);
-        strcat(data_str, iter->next->key);
+        strcat(data_str, iter.key);
         strcat(data_str, "=");
-        strcat(data_str, iter->next->value);
-        iter = iter->next;
+        strcat(data_str, iter.value);
     } return data_str;
-}
-
-// Base 64 encoding stuff
-char* base64_url_random(size_t size) {
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    char *str = (char*) malloc(size + 1);
-    if (size) {
-        for (size_t n = 0; n < size; n++) {
-            int key = rand() % (int) (sizeof charset - 1);
-            str[n] = charset[key];
-        } str[size] = '\0';
-    } return str;
-}
-
-char* base64_url_encode(const char *plain) {
-    const char base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    int len = strlen(plain);
-    char* encoded = (char*) malloc(len);
-
-    char *p = encoded;
-
-    int i;
-    for (i = 0; i < len - 2; i += 3) {
-        *p++ = base64[(plain[i] >> 2) & 0x3F];
-        *p++ = base64[((plain[i] & 0x3) << 4) | ((int) (plain[i + 1] & 0xF0) >> 4)];
-        *p++ = base64[((plain[i + 1] & 0xF) << 2) | ((int) (plain[i + 2] & 0xC0) >> 6)];
-        *p++ = base64[plain[i + 2] & 0x3F];
-    } 
-
-    if (i < len) {
-        *p++ = base64[(plain[i] >> 2) & 0x3F];
-        if (i == (len - 1)) {
-            *p++ = base64[((plain[i] & 0x3) << 4)];
-        } else {
-            *p++ = base64[((plain[i] & 0x3) << 4) | ((int) (plain[i + 1] & 0xF0) >> 4)];
-            *p++ = base64[((plain[i + 1] & 0xF) << 2)];
-        }
-    }
-
-    *p++ = '\0';
-    return encoded;
 }
