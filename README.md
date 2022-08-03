@@ -7,9 +7,6 @@ access token refresh, state saving, etc.
 
 ### Missing functionality
 
-- RELEVANT Fix wrong termination on code_challenge after
-hash generation (base64 encoding works fine)
-
 - RELEVANT Handling on auth callback different than
 application/json
 
