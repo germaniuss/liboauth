@@ -265,3 +265,11 @@ int oauth_save(OAuth* oauth, const char* dir, const char* name) {
     fclose(fp);
     return 1;
 }
+
+int main() {
+    srand(time(NULL));
+    OAuth* oauth = oauth_create("ed7f347e239153101c9e6fc6b5bdfece", "", "");
+    oauth_start(oauth, "https://myanimelist.net/v1/oauth2/authorize", "https://myanimelist.net/v1/oauth2/token", "plain");
+    oauth_save(oauth, "", "MAL");
+    oauth_delete(oauth);
+}
