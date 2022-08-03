@@ -15,9 +15,6 @@ code retrieval (I'd like to use protocol
 handlers but implementing on many platforms
 seems hard)
 
-- IMPORTANT Serialization of OAuth and saving/opening
-functionality.
-
 - IMPORTANT Access token refresh functionality
 using the refresh token.
 
