@@ -1,4 +1,4 @@
-# anisync-oauth
+# weebysnc-oauth
 ### Minimal C oauth 2.0 authentication ilbrary using libcurl and libmicrohttpd
 
 This library is heavily insipred by https://github.com/slugonamission/OAuth2
