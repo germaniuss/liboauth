@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include "utils.h"
 #include "tiny-json.h"
+#include "sha-256.h"
 #include "OAuth.h"
 
 enum MHD_Result oauth_get_code (
@@ -87,12 +88,14 @@ void oauth_start(OAuth* oauth, const char* baseAuthURL, const char* baseTokenURL
 bool oauth_gen_challenge(OAuth* oauth, const char* code_challenge_method) {
     if (code_challenge_method[0] != '\0') oauth->code_challenge_method = strdupex(code_challenge_method, 0);
     if (!strcmp(oauth->code_challenge_method, "plain")) {
-        oauth->code_verifier = genCodeChallenge(128);
+        oauth->code_verifier = base64_url_random(32);
         oauth->code_challenge = strdupex(oauth->code_verifier, 0);
         return true;
-    } else if (!strcmp(oauth->code_challenge_method, "SHA256")) {
-        oauth->code_verifier = genCodeVerifier();
-        oauth->code_challenge = genCodeChallenge(128);
+    } else if (!strcmp(oauth->code_challenge_method, "S256")) {
+        oauth->code_verifier = base64_url_random(32);
+        uint8_t hash[32];
+        calc_sha_256(hash, oauth->code_verifier, strlen(oauth->code_verifier));
+        oauth->code_challenge = base64_url_encode(hash);
         return true;
     } return false;
 }
@@ -207,3 +210,10 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     curl_global_cleanup();
     return resp_data;
 }
+
+int main() {
+    srand(time(NULL));
+    OAuth* oauth = oauth_create("ed7f347e239153101c9e6fc6b5bdfece", "", "");
+    oauth_start(oauth, "https://myanimelist.net/v1/oauth2/authorize", "https://myanimelist.net/v1/oauth2/token", "S256");
+    oauth_delete(oauth);
+} 
