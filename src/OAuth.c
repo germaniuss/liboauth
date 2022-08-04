@@ -1,5 +1,4 @@
 #include "OAuth.h"
-#include <pthread.h>
 
 enum MHD_Result oauth_get_code (
     void *cls, struct MHD_Connection *connection,
@@ -23,9 +22,9 @@ enum MHD_Result oauth_get_code (
     ht_set(oauth->params, "refresh_token", strdupex(json_getValueWrap(parent, "refresh_token"), 0));
     ht_set(oauth->params, "expires_in", strdupex(json_getValueWrap(parent, "expires_in"), 0));
 
-    /////////////////////////////////////////////////////////////////////
+    free(token_response);
 
-    ht_get(oauth->params, "token_type");
+    /////////////////////////////////////////////////////////////////////
 
     char* str = strdupex(ht_get(oauth->params, "token_type"), strlen(ht_get(oauth->params, "access_token")) + 1);
     strcat(str, " ");
@@ -36,10 +35,8 @@ enum MHD_Result oauth_get_code (
     oauth->authed = true;
 
     const char *page  = "<HTML><HEAD>Return to the app now.</BODY></HTML>";
-    struct MHD_Response *response;
-    int ret;
-    response = MHD_create_response_from_buffer (strlen (page), (void*) page, MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response (connection, MHD_HTTP_OK, response);
+    struct MHD_Response *response = MHD_create_response_from_buffer (strlen (page), (void*) page, MHD_RESPMEM_PERSISTENT);
+    int ret = MHD_queue_response (connection, MHD_HTTP_OK, response);
     MHD_destroy_response (response);
     return ret;
 }
@@ -62,9 +59,8 @@ void oauth_delete(OAuth* oauth) {
 
 bool oauth_start(OAuth* oauth) {
 
-    if (
-        !ht_get(oauth->params, "base_auth_url") || 
-        !ht_get(oauth->params, "base_token_url")|| 
+    if (!ht_get(oauth->params, "base_auth_url")  || 
+        !ht_get(oauth->params, "base_token_url") || 
         !ht_get(oauth->params, "client_id")
     ) return false;
 
@@ -73,13 +69,47 @@ bool oauth_start(OAuth* oauth) {
     request_params params;
     params.port = 8000;
     params.sec = 30;
-    params.request_callback = &oauth_get_code;
     params.data = oauth;
+    params.request_callback = &oauth_get_code;
     char* url = oauth_auth_url(oauth);
     pthread_create(&th, NULL, acceptSingleRequest, (void*) &params);
     openBrowser(url);
     free(url);
     pthread_join(th, NULL);
+}
+
+typedef struct timer_params {
+    uint64_t sec;
+    OAuth* oauth;
+} timer_params;
+
+void* oauth_refresh_timer(void* data) {
+    timer_params* params = (timer_params*) data;
+    OAuth* oauth = params->oauth;
+    time_t start = time (NULL);
+    sleep(params->sec);
+
+    if (!ht_get(oauth->params, "client_id") || !ht_get(oauth->params, "refresh_token"))
+        return NULL;
+
+    ht* req_data = ht_copy(oauth->data);
+    if (((char*)ht_get(oauth->params, "client_secret"))[0] != '\0') 
+        ht_set(req_data, "client_secret", ht_get(oauth->params, "client_secret"));
+    ht_set(req_data, "client_id", ht_get(oauth->params, "client_id"));
+    ht_set(req_data, "refresh_token", ht_get(oauth->params, "refresh_token"));
+    ht_set(req_data, "grant_type", "refresh_token");
+
+    response_data* response = oauth_request(NULL, POST, "https://myanimelist.net/v1/oauth2/token", NULL, req_data);
+
+
+    ht_destroy(req_data);
+}
+
+bool oauth_refresh(OAuth* oauth, uint32_t sec) {
+    timer_params params;
+    params.sec = sec;
+    params.oauth = oauth;
+    pthread_create(&oauth->refresh_thread, NULL, oauth_refresh_timer, (void*) &params);
 }
 
 bool oauth_gen_challenge(OAuth* oauth) {
@@ -92,9 +122,9 @@ bool oauth_gen_challenge(OAuth* oauth) {
         oauth->code_challenge = strdupex(oauth->code_verifier, 0);
         return true;
     } else if (strcmp(ht_get(oauth->params, "code_challenge_method"), "S256") == 0) {
-        oauth->code_verifier = base64_url_random(32);
         uint8_t hash[32];
         char hash_string[65];
+        oauth->code_verifier = base64_url_random(32);
         calc_sha_256(hash, oauth->code_verifier, strlen(oauth->code_verifier));
         hash_to_string(hash_string, hash);
         oauth->code_challenge = base64_url_encode(hash_string);
@@ -222,7 +252,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     return resp_data;
 }
 
-int oauth_load(OAuth* oauth, const char* dir, const char* name) {
+bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
     char * line = NULL;
     size_t len = 0;
     ssize_t read;
@@ -251,7 +281,7 @@ int oauth_load(OAuth* oauth, const char* dir, const char* name) {
     return oauth;
 }
 
-int oauth_save(OAuth* oauth, const char* dir, const char* name) {
+bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     char* full_dir;
     if (dir[0] == '\0') full_dir = strdupex(dir, strlen(name) + 5);
     else {
@@ -280,7 +310,9 @@ int main() {
     srand(time(NULL));
     OAuth* oauth = oauth_create();
     oauth_load(oauth, "", "TEST");
-    oauth_start(oauth);
+    oauth_refresh(oauth, 15);
+    while(true);
+    // oauth_start(oauth);
     oauth_save(oauth, "", "TEST");
     oauth_delete(oauth);
 }

@@ -39,6 +39,14 @@ ht* ht_create(void) {
     return table;
 }
 
+ht* ht_copy(ht* table) {
+    ht* newtable = ht_create();
+    hti iter = ht_iterator(table);
+    while(ht_next(&iter)) {
+        ht_set(newtable, iter.key, iter.value);
+    } return newtable;
+}
+
 void ht_destroy(ht* table) {
     // First free allocated keys.
     for (size_t i = 0; i < table->capacity; i++) {
@@ -179,14 +187,6 @@ hti ht_iterator(ht* table) {
     it._table = table;
     it._index = 0;
     return it;
-}
-
-ht* ht_copy(ht* table) {
-    ht* newtable = ht_create();
-    hti iter = ht_iterator(table);
-    while(ht_next(&iter)) {
-        ht_set(newtable, iter.key, iter.value);
-    } return newtable;
 }
 
 bool ht_next(hti* it) {
