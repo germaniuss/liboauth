@@ -13,6 +13,11 @@ application/json
 - RELEVANT Better handling on browser opening and
 code retrieval with URI schemes.
 
+- RELEVANT Add async request support for the same oauth
+module with the same client_id. This may not work on some
+APIs since they might limit incoming trafic but will be
+usefull for many others.
+
 - IMPORTANT Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing. Also I should probably read the response
