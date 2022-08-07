@@ -120,7 +120,10 @@ void* oauth_refresh_task(void* in) {
 }
 
 bool oauth_refresh(OAuth* oauth, uint64_t ms) {
+    if (!map_get(oauth->params, "refresh_token") || !map_get(oauth->params, "client_id") || !map_get(oauth->params, "base_token_url"))
+        return false;
     timer_start(&oauth->refresh_timer, ms, oauth_refresh_task, oauth);
+    return true;
 }
 
 bool oauth_gen_challenge(OAuth* oauth) {
@@ -288,6 +291,7 @@ bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
 
     fclose(fp);
     if (line) free(line);
+    oauth_refresh(oauth, 0);
     return oauth;
 }
 
@@ -320,6 +324,5 @@ int main() {
     srand(time_ms());
     OAuth* oauth = oauth_create();
     oauth_load(oauth, "", "TEST");
-    oauth_refresh(oauth, 0);
     oauth_delete(oauth);
 }
