@@ -33,8 +33,7 @@ Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing. 
 
-base64 and str should be merged as well as OAuth and 
-utils.
+base64 and str should be merged.
 
 Standarization of used libraries and compliance with C99
 
