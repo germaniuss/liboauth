@@ -19,7 +19,8 @@ access token refresh, state saving, etc.
 application/json (AKA XML)
 
 - [ ] Better handling on browser opening and
-code retrieval with URI schemes.
+code retrieval with URI schemes (may keep the old
+method after implementation)
 
 - [ ] Add async request support for the same oauth
 module with the same client_id. This may not work on some
