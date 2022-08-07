@@ -266,25 +266,68 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
 }
 
 bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
-    return false;
+    char * line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    const char *token;
+
+    char* full_dir = NULL;
+    if (dir[0] != '\0') str_append(&full_dir, "/");
+    str_append_fmt(&full_dir, "%s.yaml", name);
+
+    FILE * fp = fopen(full_dir, "r");
+    str_destroy(&full_dir);
+    if (fp == NULL) return NULL;
+
+    while (getline(&line, &len, fp) != -1) {
+        char* save = NULL;
+        char* lenline = str_create(line);
+        token = str_token_begin(lenline, &save, ":");
+        char* key_token = str_create(token);
+        str_trim(&key_token, " \n\t\r");
+        token = str_token_begin(lenline, &save, "");
+        char* value_token = str_create(token);
+        str_trim(&value_token, " \n\t\r");
+        map_put(oauth->params, key_token, value_token);
+        str_destroy(&lenline);
+    }
+
+    fclose(fp);
+    if (line) free(line);
+    return oauth;
 }
 
 bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
-    return false;
+    char* full_dir = NULL;
+    if (dir[0] != '\0') str_append(full_dir, "/");
+    str_append_fmt(&full_dir, "%s.yaml", name);
+
+    FILE *fp = fopen(full_dir, "w");
+    str_destroy(&full_dir);
+    if (fp == NULL) {
+        printf("Error opening the file %s", dir);
+        return NULL;
+    }
+
+    // write to the text file
+    map_iterator* iter = map_iterator_alloc(oauth->params);
+    const char* key; const char* value;
+    while (map_iterator_has_next(iter)) {
+        map_iterator_next(iter, &key, &value);
+        fprintf(fp, "%s: %s\n", key, value);
+    }
+        
+    // close the file
+    fclose(fp);
+    return 1;
 }
 
 int main() {
     srand(time_ms(NULL));
     OAuth* oauth = oauth_create();
-    oauth_set_param(oauth, "client_id", str_create("ed7f347e239153101c9e6fc6b5bdfece"));
-    oauth_set_param(oauth, "base_auth_url", str_create("https://myanimelist.net/v1/oauth2/authorize"));
-    oauth_set_param(oauth, "base_token_url", str_create("https://myanimelist.net/v1/oauth2/token"));
-    oauth_set_param(oauth, "code_challenge_method", str_create("plain"));
-    oauth_start(oauth);
-    // oauth_load(oauth, "", "TEST");
+    oauth_load(oauth, "", "TEST");
+    oauth_refresh(oauth, 0);
     // oauth_refresh(oauth, 15);
-    while(true);
     // oauth_start(oauth);
-    oauth_save(oauth, "", "TEST");
     oauth_delete(oauth);
 }
