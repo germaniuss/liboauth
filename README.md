@@ -14,9 +14,8 @@ application/json
 code retrieval with URI schemes.
 
 - RELEVANT Simplification of the codebase for tighter
-integration of the libraries used.
-
-- IMPORTANT Add config saving and reading functionality.
+integration of the libraries used as well as general
+bugfixing.
 
 ### Contributing
 
