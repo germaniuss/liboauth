@@ -1,5 +1,4 @@
 #include "utils.h"
-#include "queue.h"
 #include "mutex.h"
 #include "thread.h"
 #include "unordered_map.h"
@@ -7,11 +6,11 @@
 
 typedef struct OAuth {
     bool request_run;
-    struct queue_ptr request_queue;
+    unordered_map* request_queue;
     struct thread request_thread;
     struct mutex request_mutex;
     uint64_t request_timeout;
-    struct unordered_map_sv cache;
+    unordered_map* cache;
     struct timer refresh_timer;
     map* params;
     map* header;

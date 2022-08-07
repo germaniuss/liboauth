@@ -47,25 +47,25 @@ OAuth* oauth_create() {
     oauth->port = 8000;
     oauth->listen_timeout = 30;
     timer_init(&oauth->refresh_timer);
-    queue_init(&oauth->request_queue);
+    oauth->request_queue = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
     mutex_init(&oauth->request_mutex);
     oauth->params = map_alloc(strcmp);
     oauth->data = NULL;
     oauth->header = NULL;
-    unordered_map_init_sv(&oauth->cache, 0, 0);
+    oauth->cache = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
     return oauth;
 }
 
 void oauth_delete(OAuth* oauth) {
     timer_term(&oauth->refresh_timer);
-    queue_free(&oauth->request_queue);
+    unordered_map_free(oauth->request_queue);
     mutex_term(&oauth->request_mutex);
     map_free(oauth->params);
     if (oauth->data) map_free(oauth->data);
     if (oauth->header) map_free(oauth->header);
     if (oauth->code_challenge) str_destroy(&oauth->code_challenge);
     if (oauth->code_verifier) str_destroy(&oauth->code_verifier);
-    unordered_map_term_sv(&oauth->cache);
+    unordered_map_free(oauth->cache);
 }
 
 bool oauth_start(OAuth* oauth) {
@@ -210,13 +210,13 @@ void oauth_set_data(OAuth* oauth, map* data) {
 void* oauth_process_request(void* data) {
     OAuth* oauth = (OAuth*) data;
     while (oauth->request_run) {
-        while (queue_empty(&oauth->request_queue) && oauth->request_run);
+        while (unordered_map_empty(oauth->request_queue) && oauth->request_run);
         if (!oauth->request_run) break;
         mutex_lock(&oauth->request_mutex);
-        request_data* rq_data = queue_peek_first(&oauth->request_queue);
-        queue_del_first(&oauth->request_queue);
+        request_data* rq_data = unordered_map_first(oauth->request_queue);
+        unordered_map_remove(oauth->request_queue, rq_data->id);
         response_data* response = request(rq_data->method, rq_data->endpoint, rq_data->header, rq_data->data);
-        unordered_map_put_sv(&oauth->cache, rq_data->id, response);
+        unordered_map_put(oauth->cache, rq_data->id, response);
         time_sleep(oauth->request_timeout);
         mutex_unlock(&oauth->request_mutex);
     }
@@ -248,19 +248,13 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     str_append_fmt(&rq_data->id, "%s?%s", rq_data->endpoint, rq_data->data);
 
     response_data* response;
-    if (cache && (response = unordered_map_get_sv(&oauth->cache, rq_data->id))) { 
-        bool found = false;
-        for (int i = 0; i < queue_size(&oauth->request_queue); i++) {
-            request_data* in_queue = queue_at(&oauth->request_queue, i);
-            if (str_cmp(in_queue->id, rq_data->id)) {
-                found = true; 
-                break;
-            }
-        } if (!found) queue_add_last(&oauth->request_queue, rq_data);
+    if (cache && (response = unordered_map_get(oauth->cache, rq_data->id))) { 
+        if (!unordered_map_contains_key(oauth->request_queue, rq_data->id))
+            unordered_map_put(oauth->request_queue, rq_data->id, rq_data);
     } else  {
         mutex_lock(&oauth->request_mutex);
         response = request(method, endpoint, rq_data->header, rq_data->data);
-        if (cache) unordered_map_put_sv(&oauth->cache, rq_data->id, response);
+        if (cache) unordered_map_put(oauth->cache, rq_data->id, response);
         mutex_unlock(&oauth->request_mutex);
     } return response;
 }
@@ -323,11 +317,9 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
 }
 
 int main() {
-    srand(time_ms(NULL));
+    srand(time_ms());
     OAuth* oauth = oauth_create();
     oauth_load(oauth, "", "TEST");
     oauth_refresh(oauth, 0);
-    // oauth_refresh(oauth, 15);
-    // oauth_start(oauth);
     oauth_delete(oauth);
 }

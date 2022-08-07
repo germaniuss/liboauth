@@ -1,355 +1,514 @@
-/*
- * BSD-3-Clause
- *
- * Copyright 2021 Ozan Tezcan
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- * 3. Neither the name of the copyright holder nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
- * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
- * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
 #include "unordered_map.h"
-
+#include <stdbool.h>
+#include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
-#ifndef unordered_map_MAX
-#define unordered_map_MAX UINT32_MAX
-#endif
+typedef struct unordered_map_entry {
+    void*                       key;
+    void*                       value;
+    struct unordered_map_entry* chain_next;
+    struct unordered_map_entry* prev;
+    struct unordered_map_entry* next;
+} unordered_map_entry;
 
-#define unordered_map_def_strkey(name, K, V, cmp, hash_fn)                            \
-	bool unordered_map_cmp_##name(struct unordered_map_item_##name *t, K key,            \
-			       uint32_t hash)                                  \
-	{                                                                      \
-		return t->hash == hash && cmp(t->key, key);                    \
-	}                                                                      \
-                                                                               \
-	void unordered_map_assign_##name(struct unordered_map_item_##name *t, K key,         \
-				  V value, uint32_t hash)                      \
-	{                                                                      \
-		t->key = key;                                                  \
-		t->value = value;                                              \
-		t->hash = hash;                                                \
-	}                                                                      \
-                                                                               \
-	uint32_t unordered_map_hashof_##name(struct unordered_map_item_##name *t)            \
-	{                                                                      \
-		return t->hash;                                                \
-	}                                                                      \
-                                                                               \
-	unordered_map_def(name, K, V, cmp, hash_fn)
+struct unordered_map {
+    unordered_map_entry** table;
+    unordered_map_entry*  head;
+    unordered_map_entry*  tail;
+    size_t              (*hash_function)(void*);
+    bool                (*equals_function)(void*, void*);
+    size_t                mod_count;
+    size_t                table_capacity;
+    size_t                size;
+    size_t                max_allowed_size;
+    size_t                mask;
+    float                 load_factor;
+};
 
-#define unordered_map_def_scalar(name, K, V, cmp, hash_fn)                            \
-	bool unordered_map_cmp_##name(struct unordered_map_item_##name *t, K key,            \
-			       uint32_t hash)                                  \
-	{                                                                      \
-		(void) hash;                                                   \
-		return cmp(t->key, key);                                       \
-	}                                                                      \
-                                                                               \
-	void unordered_map_assign_##name(struct unordered_map_item_##name *t, K key,         \
-				  V value, uint32_t hash)                      \
-	{                                                                      \
-		(void) hash;                                                   \
-		t->key = key;                                                  \
-		t->value = value;                                              \
-	}                                                                      \
-                                                                               \
-	uint32_t unordered_map_hashof_##name(struct unordered_map_item_##name *t)            \
-	{                                                                      \
-		return hash_fn(t->key);                                        \
-	}                                                                      \
-                                                                               \
-	unordered_map_def(name, K, V, cmp, hash_fn)
+struct unordered_map_iterator {
+    unordered_map*       map;
+    unordered_map_entry* next_entry;
+    size_t               iterated_count;
+    size_t               expected_mod_count;
+};
 
-#define unordered_map_def(name, K, V, cmp, hash_fn)                                   \
-                                                                               \
-	static const struct unordered_map_item_##name empty_items_##name[2];          \
-                                                                               \
-	static const struct unordered_map_##name unordered_map_empty_##name = {              \
-		.cap = 1,                                                      \
-		.mem = (struct unordered_map_item_##name *) &empty_items_##name[1]};  \
-                                                                               \
-	static void *unordered_map_alloc_##name(uint32_t *cap, uint32_t factor)       \
-	{                                                                      \
-		uint32_t v = *cap;                                             \
-		struct unordered_map_item_##name *t;                                  \
-                                                                               \
-		if (*cap > unordered_map_MAX / factor) {                              \
-			return NULL;                                           \
-		}                                                              \
-                                                                               \
-		/* Find next power of two */                                   \
-		v = v < 8 ? 8 : (v * factor);                                  \
-		v--;                                                           \
-		for (uint32_t i = 1; i < sizeof(v) * 8; i *= 2) {              \
-			v |= v >> i;                                           \
-		}                                                              \
-		v++;                                                           \
-                                                                               \
-		*cap = v;                                                      \
-		t = unordered_map_calloc(sizeof(*t), v + 1);                          \
-		return t ? &t[1] : NULL;                                       \
-	}                                                                      \
-                                                                               \
-	bool unordered_map_init_##name(struct unordered_map_##name *m, uint32_t cap,         \
-				uint32_t load_fac)                             \
-	{                                                                      \
-		void *t;                                                       \
-		uint32_t f = (load_fac == 0) ? 75 : load_fac;                  \
-                                                                               \
-		if (f > 95 || f < 25) {                                        \
-			return false;                                          \
-		}                                                              \
-                                                                               \
-		if (cap == 0) {                                                \
-			*m = unordered_map_empty_##name;                              \
-			m->load_fac = f;                                       \
-			return true;                                           \
-		}                                                              \
-                                                                               \
-		t = unordered_map_alloc_##name(&cap, 1);                              \
-		if (t == NULL) {                                               \
-			return false;                                          \
-		}                                                              \
-                                                                               \
-		m->mem = t;                                                    \
-		m->size = 0;                                                   \
-		m->used = false;                                               \
-		m->cap = cap;                                                  \
-		m->load_fac = f;                                               \
-		m->remap = (uint32_t) (m->cap * ((double) m->load_fac / 100)); \
-                                                                               \
-		return true;                                                   \
-	}                                                                      \
-                                                                               \
-	void unordered_map_term_##name(struct unordered_map_##name *m)                       \
-	{                                                                      \
-		if (m->mem != unordered_map_empty_##name.mem) {                       \
-			unordered_map_free(&m->mem[-1]);                              \
-			*m = unordered_map_empty_##name;                              \
-		}                                                              \
-	}                                                                      \
-                                                                               \
-	uint32_t unordered_map_size_##name(struct unordered_map_##name *m)                   \
-	{                                                                      \
-		return m->size;                                                \
-	}                                                                      \
-                                                                               \
-	void unordered_map_clear_##name(struct unordered_map_##name *m)                      \
-	{                                                                      \
-		if (m->size > 0) {                                             \
-			for (uint32_t i = 0; i < m->cap; i++) {                \
-				m->mem[i].key = 0;                             \
-			}                                                      \
-                                                                               \
-			m->used = false;                                       \
-			m->size = 0;                                           \
-		}                                                              \
-	}                                                                      \
-                                                                               \
-	static bool unordered_map_remap_##name(struct unordered_map_##name *m)               \
-	{                                                                      \
-		uint32_t pos, cap, mod;                                        \
-		struct unordered_map_item_##name *new;                                \
-                                                                               \
-		if (m->size < m->remap) {                                      \
-			return true;                                           \
-		}                                                              \
-                                                                               \
-		cap = m->cap;                                                  \
-		new = unordered_map_alloc_##name(&cap, 2);                            \
-		if (new == NULL) {                                             \
-			return false;                                          \
-		}                                                              \
-                                                                               \
-		mod = cap - 1;                                                 \
-                                                                               \
-		for (uint32_t i = 0; i < m->cap; i++) {                        \
-			if (m->mem[i].key != 0) {                              \
-				pos = unordered_map_hashof_##name(&m->mem[i]) & mod;  \
-                                                                               \
-				while (true) {                                 \
-					if (new[pos].key == 0) {               \
-						new[pos] = m->mem[i];          \
-						break;                         \
-					}                                      \
-                                                                               \
-					pos = (pos + 1) & (mod);               \
-				}                                              \
-			}                                                      \
-		}                                                              \
-                                                                               \
-		if (m->mem != unordered_map_empty_##name.mem) {                       \
-			new[-1] = m->mem[-1];                                  \
-			unordered_map_free(&m->mem[-1]);                              \
-		}                                                              \
-                                                                               \
-		m->mem = new;                                                  \
-		m->cap = cap;                                                  \
-		m->remap = (uint32_t) (m->cap * ((double) m->load_fac / 100)); \
-                                                                               \
-		return true;                                                   \
-	}                                                                      \
-                                                                               \
-	V unordered_map_put_##name(struct unordered_map_##name *m, K key, V value)           \
-	{                                                                      \
-		V ret;                                                         \
-		uint32_t pos, mod, h;                                          \
-                                                                               \
-		m->oom = false;                                                \
-                                                                               \
-		if (!unordered_map_remap_##name(m)) {                                 \
-			m->oom = true;                                         \
-			return 0;                                              \
-		}                                                              \
-                                                                               \
-		if (key == 0) {                                                \
-			ret = (m->used) ? m->mem[-1].value : 0;                \
-			m->found = m->used;                                    \
-			m->size += !m->used;                                   \
-			m->used = true;                                        \
-			m->mem[-1].value = value;                              \
-                                                                               \
-			return ret;                                            \
-		}                                                              \
-                                                                               \
-		mod = m->cap - 1;                                              \
-		h = hash_fn(key);                                              \
-		pos = h & (mod);                                               \
-                                                                               \
-		while (true) {                                                 \
-			if (m->mem[pos].key == 0) {                            \
-				m->size++;                                     \
-			} else if (!unordered_map_cmp_##name(&m->mem[pos], key, h)) { \
-				pos = (pos + 1) & (mod);                       \
-				continue;                                      \
-			}                                                      \
-                                                                               \
-			m->found = m->mem[pos].key != 0;                       \
-			ret = m->found ? m->mem[pos].value : 0;                \
-			unordered_map_assign_##name(&m->mem[pos], key, value, h);     \
-                                                                               \
-			return ret;                                            \
-		}                                                              \
-	}                                                                      \
-                                                                               \
-	/** NOLINTNEXTLINE */                                                  \
-	V unordered_map_get_##name(struct unordered_map_##name *m, K key)                    \
-	{                                                                      \
-		const uint32_t mod = m->cap - 1;                               \
-		uint32_t h, pos;                                               \
-                                                                               \
-		if (key == 0) {                                                \
-			m->found = m->used;                                    \
-			return m->used ? m->mem[-1].value : 0;                 \
-		}                                                              \
-                                                                               \
-		h = hash_fn(key);                                              \
-		pos = h & mod;                                                 \
-                                                                               \
-		while (true) {                                                 \
-			if (m->mem[pos].key == 0) {                            \
-				m->found = false;                              \
-				return 0;                                      \
-			} else if (!unordered_map_cmp_##name(&m->mem[pos], key, h)) { \
-				pos = (pos + 1) & (mod);                       \
-				continue;                                      \
-			}                                                      \
-                                                                               \
-			m->found = true;                                       \
-			return m->mem[pos].value;                              \
-		}                                                              \
-	}                                                                      \
-                                                                               \
-	/** NOLINTNEXTLINE */                                                  \
-	V unordered_map_del_##name(struct unordered_map_##name *m, K key)                    \
-	{                                                                      \
-		const uint32_t mod = m->cap - 1;                               \
-		uint32_t pos, prev, it, p, h;                                  \
-		V ret;                                                         \
-                                                                               \
-		if (key == 0) {                                                \
-			m->found = m->used;                                    \
-			m->size -= m->used;                                    \
-			m->used = false;                                       \
-                                                                               \
-			return m->found ? m->mem[-1].value : 0;                \
-		}                                                              \
-                                                                               \
-		h = hash_fn(key);                                              \
-		pos = h & (mod);                                               \
-                                                                               \
-		while (true) {                                                 \
-			if (m->mem[pos].key == 0) {                            \
-				m->found = false;                              \
-				return 0;                                      \
-			} else if (!unordered_map_cmp_##name(&m->mem[pos], key, h)) { \
-				pos = (pos + 1) & (mod);                       \
-				continue;                                      \
-			}                                                      \
-                                                                               \
-			m->found = true;                                       \
-			ret = m->mem[pos].value;                               \
-                                                                               \
-			m->size--;                                             \
-			m->mem[pos].key = 0;                                   \
-			prev = pos;                                            \
-			it = pos;                                              \
-                                                                               \
-			while (true) {                                         \
-				it = (it + 1) & (mod);                         \
-				if (m->mem[it].key == 0) {                     \
-					break;                                 \
-				}                                              \
-                                                                               \
-				p = unordered_map_hashof_##name(&m->mem[it]) & (mod); \
-                                                                               \
-				if ((p > it && (p <= prev || it >= prev)) ||   \
-				    (p <= prev && it >= prev)) {               \
-                                                                               \
-					m->mem[prev] = m->mem[it];             \
-					m->mem[it].key = 0;                    \
-					prev = it;                             \
-				}                                              \
-			}                                                      \
-                                                                               \
-			return ret;                                            \
-		}                                                              \
-	}
+static unordered_map_entry* unordered_map_entry_alloc(void* key, void* value)
+{
+    unordered_map_entry* entry = malloc(sizeof(*entry));
 
-static uint32_t unordered_map_hash_32(uint32_t a)
+    if (!entry) 
+    {
+        return NULL;
+    }
+    
+    entry->key        = key;
+    entry->value      = value;
+    entry->chain_next = NULL;
+    entry->next       = NULL;
+    entry->prev       = NULL;
+
+    return entry;
+}
+
+static const float  MINIMUM_LOAD_FACTOR = 0.2f;
+static const size_t MINIMUM_INITIAL_CAPACITY = 16;
+
+static float maxf(float a, float b) 
+{
+    return a < b ? b : a;
+}
+
+static int maxi(int a, int b) 
+{
+    return a < b ? b : a;
+}
+
+/*******************************************************************************
+* Makes sure that the load factor is no less than a minimum threshold.         *
+*******************************************************************************/  
+static float fix_load_factor(float load_factor)
+{
+    return maxf(load_factor, MINIMUM_LOAD_FACTOR);
+}
+
+/*******************************************************************************
+* Makes sure that the initial capacity is no less than a minimum allowed and   *
+* is a power of two.                                                           * 
+*******************************************************************************/  
+static size_t fix_initial_capacity(size_t initial_capacity) 
+{
+    size_t ret;
+
+    initial_capacity = maxi(initial_capacity, MINIMUM_INITIAL_CAPACITY);
+    ret = 1;
+
+    while (ret < initial_capacity) 
+    {
+        ret <<= 1;
+    }
+        
+    return ret;
+}
+
+unordered_map* unordered_map_alloc(size_t initial_capacity,
+                                   float load_factor,
+                                   size_t (*hash_function)(void*),
+                                   bool (*equals_function)(void*, void*))
+{
+    unordered_map* map;
+
+    if (!hash_function || !equals_function)  
+    {
+        return NULL;
+    }
+
+    map = malloc(sizeof(*map));
+
+    if (!map) 
+    {
+        return NULL;
+    }
+    
+    load_factor      = fix_load_factor(load_factor);
+    initial_capacity = fix_initial_capacity(initial_capacity);
+
+    map->load_factor      = load_factor;
+    map->table_capacity   = initial_capacity;
+    map->size             = 0;
+    map->mod_count        = 0;
+    map->head             = NULL;
+    map->tail             = NULL;
+    map->table            = calloc(initial_capacity, 
+                                   sizeof(unordered_map_entry*));
+    map->hash_function    = hash_function;
+    map->equals_function  = equals_function;
+    map->mask             = initial_capacity - 1;
+    map->max_allowed_size = (size_t)(initial_capacity * load_factor);
+
+    return map;
+}
+
+static void ensure_capacity(unordered_map* map) 
+{
+    size_t new_capacity;
+    size_t new_mask;
+    size_t index;
+    unordered_map_entry* entry;
+    unordered_map_entry** new_table;
+
+    if (map->size < map->max_allowed_size) 
+    {
+        return;
+    }
+    
+    new_capacity = 2 * map->table_capacity;
+    new_mask     = new_capacity - 1;
+    new_table    = calloc(new_capacity, sizeof(unordered_map_entry*));
+    
+    if (!new_table)
+    {
+        return;
+    }
+    
+    /* Rehash the entries. */
+    for (entry = map->head; entry; entry = entry->next)
+    {
+        index = map->hash_function(entry->key) & new_mask;
+        entry->chain_next = new_table[index];
+        new_table[index] = entry;
+    }
+
+    free(map->table);
+    
+    map->table            = new_table;
+    map->table_capacity   = new_capacity;
+    map->mask             = new_mask;
+    map->max_allowed_size = (size_t)(new_capacity * map->load_factor);
+}
+
+void* unordered_map_put(unordered_map* map, void* key, void* value)
+{
+    size_t index;
+    size_t hash_value;
+    void* old_value;
+    unordered_map_entry* entry;
+
+    if (!map) 
+    {
+        return NULL;
+    }
+    
+    hash_value = map->hash_function(key);
+    index = hash_value & map->mask;
+
+    for (entry = map->table[index]; entry; entry = entry->chain_next)
+    {
+        if (map->equals_function(entry->key, key))
+        {
+            old_value = entry->value;
+            entry->value = value;
+            return old_value;
+        }
+    }
+
+    ensure_capacity(map);
+
+    /* Recompute the index since it is possibly changed by 'ensure_capacity' */
+    index             = hash_value & map->mask;
+    entry             = unordered_map_entry_alloc(key, value);
+    entry->chain_next = map->table[index];
+    map->table[index] = entry;
+
+    /* Link the new entry to the tail of the list. */
+    if (!map->tail)
+    {
+        map->head = entry;
+        map->tail = entry;
+    }
+    else
+    {
+        map->tail->next = entry;
+        entry->prev = map->tail;
+        map->tail = entry;
+    }
+
+    map->size++;
+    map->mod_count++;
+    
+    return NULL;
+}
+
+bool unordered_map_contains_key(unordered_map* map, void* key)
+{
+    size_t index;
+    unordered_map_entry* entry;
+
+    if (!map) 
+    {
+        return false;
+    }
+    
+    index = map->hash_function(key) & map->mask;
+
+    for (entry = map->table[index]; entry; entry = entry->chain_next) 
+    {
+        if (map->equals_function(key, entry->key))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void* unordered_map_get(unordered_map* map, void* key)
+{
+    size_t index;
+    unordered_map_entry* p_entry;
+
+    if (!map) 
+    {
+        return NULL;
+    }
+    
+    index = map->hash_function(key) & map->mask;
+
+    for (p_entry = map->table[index]; p_entry; p_entry = p_entry->chain_next)
+    {
+        if (map->equals_function(key, p_entry->key))
+        {
+            return p_entry->value;
+        }
+    }
+
+    return NULL;
+}
+
+void* unordered_map_remove(unordered_map* map, void* key)
+{
+    void*  value;
+    size_t index;
+    unordered_map_entry* prev_entry;
+    unordered_map_entry* current_entry;
+
+    if (!map) 
+    {
+        return NULL;
+    }
+    
+    index = map->hash_function(key) & map->mask;
+
+    prev_entry = NULL;
+
+    for (current_entry = map->table[index];
+         current_entry;
+         current_entry = current_entry->chain_next)
+    {
+        if (map->equals_function(key, current_entry->key)) 
+        {
+            if (prev_entry)
+            {
+                /* Omit the 'p_current_entry' in the collision chain. */
+                prev_entry->chain_next = current_entry->chain_next;
+            }
+            else
+            {
+                map->table[index] = current_entry->chain_next;
+            }
+
+            /* Unlink from the global iteration chain. */
+            if (current_entry->prev)
+            {
+                current_entry->prev->next = current_entry->next;
+            }
+            else
+            {
+                map->head = current_entry->next;
+            }
+            
+            if (current_entry->next)
+            {
+                current_entry->next->prev = current_entry->prev;
+            }
+            else
+            {
+                map->tail = current_entry->prev;
+            }
+
+            value = current_entry->value;
+            map->size--;
+            map->mod_count++;
+            free(current_entry);
+            return value;
+        }
+
+        prev_entry = current_entry;
+    }
+
+    return NULL;
+}
+
+void unordered_map_clear(unordered_map* map)
+{
+    unordered_map_entry* entry;
+    unordered_map_entry* next_entry;
+    size_t index;
+
+    if (!map)
+    {
+        return;
+    }
+    
+    entry = map->head;
+
+    while (entry)
+    {
+        index = map->hash_function(entry->key) & map->mask;
+        next_entry = entry->next;
+        free(entry);
+        entry = next_entry;
+        map->table[index] = NULL;
+    }
+
+    map->mod_count += map->size;
+    map->size = 0;
+    map->head = NULL;
+    map->tail = NULL;
+}
+
+size_t unordered_map_size(unordered_map* map)
+{
+    return map ? map->size : 0;
+}
+
+bool unordered_map_is_healthy(unordered_map* map)
+{
+    size_t counter;
+    unordered_map_entry* entry;
+
+    if (!map)
+    {
+        return false;
+    }
+    
+    counter = 0;
+    entry = map->head;
+
+    if (entry && entry->prev) 
+    {
+        return false;
+    }
+    
+    for (; entry; entry = entry->next)
+    {
+        counter++;
+    }
+
+    return counter == map->size;
+}
+
+void unordered_map_free(unordered_map* map)
+{
+    if (!map)
+    {
+        return;
+    }
+    
+    unordered_map_clear(map);
+    free(map->table);
+    free(map);
+}
+
+unordered_map_iterator* 
+unordered_map_iterator_alloc(unordered_map* map)
+{
+    unordered_map_iterator* p_ret;
+
+    if (!map) 
+    {
+        return NULL;
+    }
+    
+    p_ret = malloc(sizeof(*p_ret));
+
+    if (!p_ret) 
+    {
+        return NULL;
+    }
+    
+    p_ret->map              = map;
+    p_ret->iterated_count     = 0;
+    p_ret->next_entry       = map->head;
+    p_ret->expected_mod_count = map->mod_count;
+
+    return p_ret;
+}
+
+size_t unordered_map_iterator_has_next(unordered_map_iterator* iterator)
+{
+    if (!iterator) 
+    {
+        return 0;
+    }
+    
+    if (unordered_map_iterator_is_disturbed(iterator)) 
+    {
+        return 0;
+    }
+    
+    return iterator->map->size - iterator->iterated_count;
+}
+
+bool unordered_map_iterator_next(unordered_map_iterator* iterator, 
+                                   void** key_pointer, 
+                                   void** value_pointer)
+{
+    if (!iterator)   
+    {
+        return false;
+    }
+        
+    if (!iterator->next_entry)         
+    {
+        return false;
+    }
+    
+    if (unordered_map_iterator_is_disturbed(iterator))
+    {
+        return false;
+    }
+    
+    *key_pointer   = iterator->next_entry->key;
+    *value_pointer = iterator->next_entry->value;
+    iterator->iterated_count++;
+    iterator->next_entry = iterator->next_entry->next;
+    
+    return true;
+}
+
+bool unordered_map_iterator_is_disturbed(unordered_map_iterator* iterator)
+{
+    if (!iterator)
+    {
+        false;
+    }
+    
+    return iterator->expected_mod_count != iterator->map->mod_count;
+}
+
+void unordered_map_iterator_free(unordered_map_iterator* iterator)
+{
+    if (!iterator) 
+    {
+        return;
+    }
+    
+    iterator->map = NULL;
+    iterator->next_entry = NULL;
+    free(iterator);
+}
+
+void* unordered_map_first(unordered_map* map) {
+    return map->head;
+}
+  
+bool unordered_map_empty(unordered_map* map) {
+    return map->size == 0;
+}
+
+size_t unordered_map_hash_32(uint32_t a)
 {
 	return a;
 }
 
-static uint32_t unordered_map_hash_64(uint64_t a)
+size_t unordered_map_hash_64(uint64_t a)
 {
 	return ((uint32_t) a) ^ (uint32_t) (a >> 32u);
 }
 
-// clang-format off
-uint32_t murmurhash(const char *key)
+// clang-format off (murmurhash)
+size_t unordered_map_hash_str(const char *key)
 {
 	const uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
 	const size_t len = strlen(key);
@@ -389,17 +548,3 @@ uint32_t murmurhash(const char *key)
 
 	return (uint32_t) h;
 }
-
-#define unordered_map_eq(a, b) ((a) == (b))
-#define unordered_map_streq(a, b) (!strcmp(a, b))
-
-//              name,  key type,   value type,     cmp           hash
-unordered_map_def_scalar(32,  uint32_t,     uint32_t,     unordered_map_eq,    unordered_map_hash_32)
-unordered_map_def_scalar(64,  uint64_t,     uint64_t,     unordered_map_eq,    unordered_map_hash_64)
-unordered_map_def_scalar(64v, uint64_t,     void *,       unordered_map_eq,    unordered_map_hash_64)
-unordered_map_def_scalar(64s, uint64_t,     const char *, unordered_map_eq,    unordered_map_hash_64)
-unordered_map_def_strkey(str, const char *, const char *, unordered_map_streq, murmurhash)
-unordered_map_def_strkey(sv,  const char *, void *,       unordered_map_streq, murmurhash)
-unordered_map_def_strkey(s64, const char *, uint64_t,     unordered_map_streq, murmurhash)
-
-// clang-format on

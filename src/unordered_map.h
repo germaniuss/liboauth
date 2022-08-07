@@ -1,225 +1,129 @@
-/*
- * BSD-3-Clause
- *
- * Copyright 2021 Ozan Tezcan
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- * 3. Neither the name of the copyright holder nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
- * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
- * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+#ifndef UNORDERED_MAP_H
+#define	UNORDERED_MAP_H
 
-#ifndef unordered_map_H
-#define unordered_map_H
-
-#include <memory.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
-#define unordered_map_VERSION "2.0.0"
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#else
-#define unordered_map_calloc calloc
-#define unordered_map_free free
+#ifdef	__cplusplus
+extern "C" {
 #endif
 
-#define unordered_map_dec_strkey(name, K, V)                                          \
-	struct unordered_map_item_##name {                                            \
-		K key;                                                         \
-		V value;                                                       \
-		uint32_t hash;                                                 \
-	};                                                                     \
-                                                                               \
-	unordered_map_of(name, K, V)
+    typedef struct unordered_map          unordered_map;
+    typedef struct unordered_map_iterator unordered_map_iterator;
 
-#define unordered_map_dec_scalar(name, K, V)                                          \
-	struct unordered_map_item_##name {                                            \
-		K key;                                                         \
-		V value;                                                       \
-	};                                                                     \
-                                                                               \
-	unordered_map_of(name, K, V)
+    /***************************************************************************
+    * Allocates a new, empty map with given hash function and given equality   *
+    * testing function.                                                        * 
+    ***************************************************************************/ 
+    unordered_map* unordered_map_alloc 
+           (size_t   initial_capacity,
+            float    load_factor,
+            size_t (*hash_function)(void*),
+            bool   (*equals_function)(void*, void*));
 
-#define unordered_map_of(name, K, V)                                                  \
-	struct unordered_map_##name {                                                 \
-		struct unordered_map_item_##name *mem;                                \
-		uint32_t cap;                                                  \
-		uint32_t size;                                                 \
-		uint32_t load_fac;                                             \
-		uint32_t remap;                                                \
-		bool used;                                                     \
-		bool oom;                                                      \
-		bool found;                                                    \
-	};                                                                     \
-                                                                               \
-	/**                                                                    \
-	 * Create map                                                          \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 * @param cap initial capacity, zero is accepted                       \
-	 * @param load_factor must be >25 and <95. Pass 0 for default value.   \
-	 * @return 'true' on success,                                          \
-	 *         'false' on out of memory or if 'load_factor' value is       \
-	 *          invalid.                                                   \
-	 */                                                                    \
-	bool unordered_map_init_##name(struct unordered_map_##name *map, uint32_t cap,       \
-				uint32_t load_factor);                         \
-                                                                               \
-	/**                                                                    \
-	 * Destroy map.                                                        \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 */                                                                    \
-	void unordered_map_term_##name(struct unordered_map_##name *map);                    \
-                                                                               \
-	/**                                                                    \
-	 * Get map element count                                               \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 * @return element count                                               \
-	 */                                                                    \
-	uint32_t unordered_map_size_##name(struct unordered_map_##name *map);                \
-                                                                               \
-	/**                                                                    \
-	 * Clear map                                                           \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 */                                                                    \
-	void unordered_map_clear_##name(struct unordered_map_##name *map);                   \
-                                                                               \
-	/**                                                                    \
-	 * Put element to the map                                              \
-	 *                                                                     \
-	 * struct unordered_map_str map;                                              \
-	 * unordered_map_put_str(&map, "key", "value");                               \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 * @param K key                                                        \
-	 * @param V value                                                      \
-	 * @return previous value if exists                                    \
-	 *         call unordered_map_found() to see if the returned value is valid.  \
-	 */                                                                    \
-	V unordered_map_put_##name(struct unordered_map_##name *map, K key, V val);          \
-                                                                               \
-	/**                                                                    \
-	 * Get element                                                         \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 * @param K key                                                        \
-	 * @return current value if exists.                                    \
-	 *         call unordered_map_found() to see if the returned value is valid.  \
-	 */                                                                    \
-	/** NOLINTNEXTLINE */                                                  \
-	V unordered_map_get_##name(struct unordered_map_##name *map, K key);                 \
-                                                                               \
-	/**                                                                    \
-	 * Delete element                                                      \
-	 *                                                                     \
-	 * @param map map                                                      \
-	 * @param K key                                                        \
-	 * @return current value if exists.                                    \
-	 *         call unordered_map_found() to see if the returned value is valid.  \
-	 */                                                                    \
-	/** NOLINTNEXTLINE */                                                  \
-	V unordered_map_del_##name(struct unordered_map_##name *map, K key);
+    /***************************************************************************
+    * If p_map does not contain the key p_key, inserts it in the map,          *
+    * associates p_value with it and return NULL. Otherwise updates the value  *
+    * and returns the old value.                                               * 
+    ***************************************************************************/ 
+    void* unordered_map_put (unordered_map* map, void* key, void* value);
 
-/**
- * @param map map
- * @return    - if put operation overrides a value, returns true
- *            - if get operation finds the key, returns true
- *            - if del operation deletes a key, returns true
- */
-#define unordered_map_found(map) ((map)->found)
+    /***************************************************************************
+    * Returns a positive value if p_key is mapped to some value in this map.   *
+    ***************************************************************************/
+    bool unordered_map_contains_key (unordered_map* map, void* key);
 
-/**
- * @param map map
- * @return    true if put operation failed with out of memory
- */
-#define unordered_map_oom(map) ((map)->oom)
+    /***************************************************************************
+    * Returns the value associated with the p_key, or NULL if p_key is not     *
+    * mapped in the map.                                                       *
+    ***************************************************************************/
+    void* unordered_map_get (unordered_map* map, void* key);
 
-// clang-format off
+    /***************************************************************************
+    * If p_key is mapped in the map, removes the mapping and returns the value *
+    * of that mapping. If the map did not contain the mapping, returns NULL.   *
+    ***************************************************************************/ 
+    void* unordered_map_remove (unordered_map* map, void* p_key);
 
-/**
- * Foreach loop
- *
- * char *key, *value;
- * struct unordered_map_str map;
- *
- * unordered_map_foreach(&map, key, value) {
- *      printf("key = %s, value = %s \n");
- * }
- */
-#define unordered_map_foreach(map, K, V)                                                  \
-	for (int64_t _i = -1, _b = 0; !_b && _i < (map)->cap; _i++)                \
-		for ((V) = (map)->mem[_i].value, (K) = (map)->mem[_i].key, _b = 1; \
-		     _b && ((_i == -1 && (map)->used) || (K) != 0) ? 1 : (_b = 0); \
-		     _b = 0)
+    /***************************************************************************
+    * Removes all the contents of the map.                                     * 
+    ***************************************************************************/ 
+    void unordered_map_clear (unordered_map* map);
 
-/**
- * Foreach loop for keys
- *
- * char *key;
- * struct unordered_map_str map;
- *
- * unordered_map_foreach_key(&map, key) {
- *      printf("key = %s \n");
- * }
- */
-#define unordered_map_foreach_key(map, K)                                                 \
-	for (int64_t _i = -1, _b = 0; !_b && _i < (map)->cap; _i++)                \
-		for ((K) = (map)->mem[_i].key, _b = 1;                             \
-		     _b && ((_i == -1 && (map)->used) || (K) != 0) ? 1 : (_b = 0); \
-		     _b = 0)
+    /***************************************************************************
+    * Returns the size of the map, or namely, the amount of key/value mappings *
+    * in the map.                                                              *
+    ***************************************************************************/ 
+    size_t unordered_map_size (unordered_map* map);
 
-/**
- * Foreach loop for values
- *
- * char *value;
- * struct unordered_map_str map;
- *
- * unordered_map_foreach_value(&map, value) {
- *      printf("value = %s \n");
- * }
- */
-#define unordered_map_foreach_value(map, V)                                                              \
-	for (int64_t _i = -1, _b = 0; !_b && _i < (map)->cap; _i++)                               \
-		for ((V) = (map)->mem[_i].value, _b = 1;                                          \
-		     _b && ((_i == -1 && (map)->used) || (map)->mem[_i].key != 0) ? 1 : (_b = 0); \
-		     _b = 0)
+    /***************************************************************************
+    * Checks that the map is in valid state.                                   *
+    ***************************************************************************/  
+    bool unordered_map_is_healthy (unordered_map* map);
 
-//              name  key type      value type
-unordered_map_dec_scalar(32,  uint32_t,     uint32_t)
-unordered_map_dec_scalar(64,  uint64_t,     uint64_t)
-unordered_map_dec_scalar(64v, uint64_t,     void *)
-unordered_map_dec_scalar(64s, uint64_t,     const char *)
-unordered_map_dec_strkey(str, const char *, const char *)
-unordered_map_dec_strkey(sv,  const char *, void*)
-unordered_map_dec_strkey(s64, const char *, uint64_t)
+    /***************************************************************************
+    * Deallocates the entire map. Only the map and its nodes are deallocated.  *
+    * The user is responsible for deallocating the actual data stored in the   *
+    * map.                                                                     *
+    ***************************************************************************/ 
+    void unordered_map_free (unordered_map* map);
 
-// clang-format on
+    /***************************************************************************
+    * Returns the iterator over the map. The entries are iterated in insertion *
+    * order.                                                                   * 
+    ***************************************************************************/  
+    unordered_map_iterator* unordered_map_iterator_alloc
+                           (unordered_map* map);
 
+    /***************************************************************************
+    * Returns the number of keys not yet iterated over.                        *
+    ***************************************************************************/ 
+    size_t unordered_map_iterator_has_next
+          (unordered_map_iterator* iterator);
+
+    /***************************************************************************
+    * Loads the next entry in the iteration order.                             *
+    ***************************************************************************/  
+    bool unordered_map_iterator_next(unordered_map_iterator* iterator, 
+                                     void** key_pointer, 
+                                     void** value_pointer);
+
+    /***************************************************************************
+    * Returns a true if the map was modified during the iteration.             *
+    ***************************************************************************/  
+    bool unordered_map_iterator_is_disturbed
+        (unordered_map_iterator* iterator);
+
+    /***************************************************************************
+    * Deallocates the map iterator.                                            *
+    ***************************************************************************/  
+    void unordered_map_iterator_free(unordered_map_iterator* iterator);
+
+    /***************************************************************************
+    * Returns the first element in queue.                                      *
+    ***************************************************************************/  
+    void* unordered_map_first(unordered_map* map);
+
+    /***************************************************************************
+    * Check if the map is empty.                                               *
+    ***************************************************************************/  
+    bool unordered_map_empty(unordered_map* map);
+
+    /***************************************************************************
+    * Define the hash functions.                                               *
+    * *************************************************************************/
+    size_t unordered_map_hash_32(uint32_t a);
+    size_t unordered_map_hash_64(uint64_t a);
+    size_t unordered_map_hash_str(const char *key);
+
+    static inline bool unordered_map_eq(uint64_t a, uint64_t b) {return (a) == (b);};
+    static inline bool unordered_map_streq(const char* a, const char* b) {return !strcmp(a, b);};
+
+#ifdef	__cplusplus
+}
 #endif
+
+#endif	/* UNORDERED_MAP_H */
+
