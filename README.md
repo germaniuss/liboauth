@@ -36,6 +36,8 @@ bugfixing.
 base64 and str should be merged as well as OAuth and 
 utils.
 
+Standarization of used libraries and compliance with C99
+
 ### Contributing
 
 Any contribution is welcome and should be done through a pull request.
