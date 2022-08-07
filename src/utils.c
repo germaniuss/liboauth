@@ -1,49 +1,33 @@
 #include "utils.h"
-#include <ctype.h>
+#include "str.h"
+#include "time.h"
 
-char* strdupex(const char* str, int val) {
-    char* aux = (char*) malloc(strlen(str) + val + 1);
-    int shrink = (val < 0) ? val : 0;
-    memcpy(aux, str, strlen(str) + 1 + shrink);
-    aux[strlen(str) + shrink] = '\0';
-    return aux;
-}
-
-char * trim(char * s) {
-    int l = strlen(s);
-    while(isspace(s[l - 1])) --l;
-    while(* s && isspace(* s)) ++s, --l;
-    if (s[0] == '\0') l = 0;
-    l -= strlen(s);
-    return strdupex(s, l);
-}
-
-int openBrowser(const char* url) {
+bool openBrowser(const char* url) {
     char* command;
     switch(platform) {
         case WINDOWS:
-            command = strdupex("explorer ", strlen(url));
+            command = str_create("explorer ");
             break;
         case MACOS:
-            command = strdupex("open ", strlen(url));
+            command = str_create("open ");
             break;
         case LINUX:
-            command = strdupex("xdg-open ", strlen(url));
+            command = str_create("xdg-open ");
             break;
         case ANDROID:
-            command = strdupex("start --user 0 com.android.browser/com.android.browser.BrowserActivity -a android.intent.action.VIEW -d ", strlen(url));
+            command = str_create("start --user 0 com.android.browser/com.android.browser.BrowserActivity -a android.intent.action.VIEW -d ");
             break;
         case IOS:
-            command = strdupex(" ", strlen(url));
+            command = str_create(" ");
             break;
         default:
-            return 0;
+            return false;
     }
 
-    strcat(command, url); /* add the extension */
+    str_append(&command, url); /* add the extension */
     system(command);
-    free(command);
-    return 1;
+    str_destroy(&command);
+    return true;
 }
 
 // THIS IS RELATED TO REQUESTS
@@ -168,35 +152,76 @@ size_t process_response(void *ptr, size_t size, size_t nmemb, void *userdata) {
 
 // THIS IS ALL RELATED TO HEADER AND DATA
 
-struct curl_slist* parseHeader(ht* header) {
-    struct curl_slist *list = NULL;
-    hti iter = ht_iterator(header);
-    while (ht_next(&iter)) {
-        char* data_str = strdupex(iter.key, strlen(iter.value) + 1);
-        strcat(data_str, "=");
-        strcat(data_str, iter.value);
-        list = curl_slist_append(list, data_str);
-        free(data_str);
-    } return list;
+char* parse_data(map* data, const char* data_join) {
+    if (!data) return NULL;
+    char* key; char* value;  
+    char* data_str = NULL;
+    map_iterator* data_iter = map_iterator_alloc(data);
+    while (map_iterator_has_next(data_iter)) {
+        map_iterator_next(data_iter, &key, &value);
+        if (data_str != NULL) str_append(&data_str, data_join);
+        str_append_fmt(&data_str, "%s=%s", key, value);
+    } map_iterator_free(data_iter);
+    return data_str;
 }
 
-char* parseData(ht* data, const char* join) {
-    
-    // Get the length of the final string
-    int len = 0;
-    hti iter = ht_iterator(data);
-    while (ht_next(&iter)) {
-        if (len != 0) len += strlen(join);
-        len += strlen(iter.key) + strlen(iter.value) + 1;
-    } if (len < 0) len = 0;
-    char* data_str = strdupex("", len);
+struct curl_slist* parse_header(map* header) {
+    if (!header) return NULL;
+    char* key; char* value;
+    struct curl_slist* header_list = NULL;
+    map_iterator* header_iter = map_iterator_alloc(header);
+    while (map_iterator_has_next(header_iter)) {
+        map_iterator_next(header_iter, &key, &value);
+        char* data_str;
+        str_append_fmt(&data_str, "%s: %s", key, value);
+        header_list = curl_slist_append(header_list, data_str);
+        str_destroy(&data_str);
+    } map_iterator_free(header_iter);
+    return header_list;
+}
 
-    // Concatenate all strings
-    iter = ht_iterator(data);
-    while (ht_next(&iter)) {
-        if (data_str[0] != '\0') strcat(data_str, join);
-        strcat(data_str, iter.key);
-        strcat(data_str, "=");
-        strcat(data_str, iter.value);
-    } return data_str;
+response_data* request(REQUEST method, const char* endpoint, struct curl_slist* header, const char* data) {
+    data_t* storage = data_create();
+    data_t* header_data = data_create();
+    response_data* resp_data = (response_data*) malloc(sizeof(response_data));
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    CURL *curl = curl_easy_init();
+    if (curl) {
+        // Set the URL, header and callback function
+        curl_easy_setopt(curl, CURLOPT_URL, endpoint);
+        if (header != NULL) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, process_response);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, storage);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, process_response);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, header_data);
+              
+        /* Now specify the POST/DELETE/PUT/PATCH data */
+        if (method != GET) {
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, REQUEST_STRING[method]);
+            curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, data);
+        }
+        
+        /* Perform the request, res will get the return code */
+        CURLcode res;
+        if((res = curl_easy_perform(curl)) != CURLE_OK) {
+            fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
+            data_clean(storage);
+            data_clean(header_data);
+            return NULL;
+        }
+
+        resp_data->data = process_response_data(storage);
+        resp_data->header = process_response_data(header_data);
+
+        /* Check for errors */
+        /* always cleanup */
+        curl_easy_cleanup(curl);
+        data_clean(storage);
+        data_clean(header_data);
+    } 
+    curl_global_cleanup();
+    return resp_data;
 }

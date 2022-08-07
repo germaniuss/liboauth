@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include "base64.h"
 
 char* base64_url_random(size_t size) {
@@ -13,6 +14,9 @@ char* base64_url_random(size_t size) {
 }
 
 char* base64_url_encode(const char *plain) {
+
+    if (plain == NULL) return NULL;
+
     const char base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     int len = strlen(plain);
     char* encoded = (char*) malloc(len);

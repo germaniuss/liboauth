@@ -1,15 +1,11 @@
-#pragma once
 #include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include <curl/curl.h>
 #include <microhttpd.h>
 
-#include "base64.h"
-#include "sha-256.h"
-#include "tiny-json.h"
-#include "ht.h"
+#include "map.h"
 
 #define MAX_BUFFER 4096 //4KB Buffers
 
@@ -58,9 +54,7 @@ static PLATFORM platform = ANDROID;
 static PLATFORM platform = LINUX;
 #endif
 
-char* strdupex(const char* str, int val);
-char * trim(char * s);
-int openBrowser(const char* url);
+bool openBrowser(const char* url);
 
 // THIS IS RELATED TO REQUESTS
 
@@ -82,11 +76,6 @@ typedef struct data_t {
     int idx;
 } data_t;
 
-typedef struct response_data {
-    char* data;
-    char* header;
-} response_data;
-
 data_t* data_create();
 void data_clean(data_t* d);
 char* process_response_data(data_t* storage);
@@ -94,5 +83,20 @@ size_t process_response(void *ptr, size_t size, size_t nmemb, void *userdata);
 
 // THIS IS ALL RELATED TO HEADER AND DATA
 
-struct curl_slist* parseHeader(ht* header);
-char* parseData(ht* data, const char* join);
+typedef struct request_data {
+    char* data;
+    struct curl_slist *header;
+    REQUEST method;
+    char* endpoint;
+    char* id;
+} request_data;
+
+char* parse_data(map* data, const char* data_join);
+struct curl_slist* parse_header(map* header);
+
+typedef struct response_data {
+    char* data;
+    char* header;
+} response_data;
+
+response_data* request(REQUEST method, const char* endpoint, struct curl_slist* header, const char* data);

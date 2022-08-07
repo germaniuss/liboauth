@@ -29,7 +29,7 @@
 
 #include <string.h>
 #include <ctype.h>
-#include "tiny-json.h"
+#include "json.h"
 
 /** Structure to handle a heap of JSON properties. */
 typedef struct jsonStaticPool_s {
@@ -40,7 +40,13 @@ typedef struct jsonStaticPool_s {
 } jsonStaticPool_t;
 
 /* Search a property by its name in a JSON object. */
-json_t const* json_getProperty( json_t const* obj, char const* property ) {
+json_t const* json_property( json_t const* obj, char const* property ) {
+    if ( !obj || !property || json_type( obj )==JSON_NULL ) {
+      return 0;
+    }
+    if ( obj->name && !strcmp( obj->name, property ) ) {
+      return obj;
+    }
     json_t const* sibling;
     for( sibling = obj->u.c.child; sibling; sibling = sibling->sibling )
         if ( sibling->name && !strcmp( sibling->name, property ) )
@@ -48,20 +54,29 @@ json_t const* json_getProperty( json_t const* obj, char const* property ) {
     return 0;
 }
 
-/* Search a property by its name in a JSON object and return its value. */
-char const* json_getPropertyValue( json_t const* obj, char const* property ) {
-	json_t const* field = json_getProperty( obj, property );
-	if ( !field ) return 0;
-        jsonType_t type = json_getType( field );
-        if ( JSON_ARRAY >= type ) return 0;
-	return json_getValue( field );
-}
-
-const char* json_getValueWrap(const json_t* parent, const char* key) {
-    if ( parent == NULL ) return NULL;
-    json_t const* key_param = json_getProperty( parent, key);
-    if ( key_param == NULL ) return NULL;
-    return json_getValue( key_param );
+/* Search a property by its name in a JSON object and return its typed value */
+json_value_t json_value( json_t const* obj, char const* property ) {
+    json_value_t value;
+    value.string = NULL;
+	json_t const* field = json_property( obj, property );
+	if ( !field ) return value;
+    jsonType_t type = json_type( field );
+    if ( JSON_ARRAY >= type ) return value;
+    
+    switch (type) {
+    case JSON_BOOLEAN:
+        value.boolean = json_boolean( field );
+        return value;
+    case JSON_INTEGER:
+        value.integer = json_integer( field );
+        return value;
+    case JSON_REAL:
+        value.real = json_double( field );
+        return value;
+    case JSON_TEXT:
+        value.string = json_string( field );
+        return value;
+    } return value;
 }
 
 /* Internal prototypes: */
@@ -74,7 +89,7 @@ static char* setToNull( char* ch );
 static bool isEndOfPrimitive( char ch );
 
 /* Parse a string to get a json. */
-json_t const* json_createWithPool( const char *str, jsonPool_t *pool ) {
+json_t const* json_create_with_pool( char *str, jsonPool_t *pool ) {
     char* ptr = goBlank( str );
     if ( !ptr || (*ptr != '{' && *ptr != '[') ) return 0;
     json_t* obj = pool->init( pool );
@@ -93,7 +108,7 @@ json_t const* json_create( char* str, json_t mem[], unsigned int qty ) {
     spool.qty = qty;
     spool.pool.init = poolInit;
     spool.pool.alloc = poolAlloc;
-    return json_createWithPool( str, &spool.pool );
+    return json_create_with_pool( str, &spool.pool );
 }
 
 /** Get a special character with its escape character. Examples:
