@@ -23,8 +23,8 @@ Any contribution is welcome and should be done through a pull request.
 
 ### Cretit
 
-Credit goes to:
-Rafa Garcia from https://github.com/rafagafe/tiny-json
-Ozan Tezcan from https://github.com/tezc/sc
-Rodion Efremov from https://github.com/coderodde/coderodde.c.utils
+Credit goes to:<\br>
+Rafa Garcia from https://github.com/rafagafe/tiny-json<\br>
+Ozan Tezcan from https://github.com/tezc/sc<\br>
+Rodion Efremov from https://github.com/coderodde/coderodde.c.utils<\br>
 for their amazing libraries.
