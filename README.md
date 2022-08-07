@@ -15,7 +15,9 @@ code retrieval with URI schemes.
 
 - IMPORTANT Simplification of the codebase for tighter
 integration of the libraries used as well as general
-bugfixing.
+bugfixing. Also I should probably read the response
+code before trying to process the response and also
+return it alongside the string.
 
 ### Contributing
 
