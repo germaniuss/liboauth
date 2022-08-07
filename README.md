@@ -27,13 +27,20 @@ module with the same client_id. This may not work on some
 APIs since they might limit incoming trafic but will be
 usefull for many others.
 
-- [ ] Simplification of the codebase for tighter
+### Next steps
+
+Simplification of the codebase for tighter
 integration of the libraries used as well as general
-bugfixing. Also I should probably read the response
+bugfixing. 
+
+Also I should probably read the response
 code before trying to process the response and also
 return it alongside the string. Right now I return
 the bare header and data strings but some processing
 is probably desirable and more user friendly.
+
+base64 and str should be merged as well as OAuth and 
+utils.
 
 ### Contributing
 
