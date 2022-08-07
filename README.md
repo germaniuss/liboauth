@@ -13,7 +13,7 @@ application/json
 - RELEVANT Better handling on browser opening and
 code retrieval with URI schemes.
 
-- RELEVANT Simplification of the codebase for tighter
+- IMPORTANT Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing.
 
