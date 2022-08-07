@@ -189,7 +189,6 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
     CURL *curl = curl_easy_init();
     if (curl) {
         // Set the URL, header and callback function
-        curl_easy_setopt(curl, CURLOPT_URL, endpoint);
         if (header != NULL) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, process_response);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, storage);
@@ -197,10 +196,12 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
         curl_easy_setopt(curl, CURLOPT_HEADERDATA, header_data);
               
         /* Now specify the POST/DELETE/PUT/PATCH data */
-        if (method != GET) {
+        if (method != GET) { 
             curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, REQUEST_STRING[method]);
             curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, data);
-        }
+        } else str_append_fmt(endpoint, "?%s", data);
+        
+        curl_easy_setopt(curl, CURLOPT_URL, endpoint);
         
         /* Perform the request, res will get the return code */
         CURLcode res;
