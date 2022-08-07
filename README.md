@@ -17,7 +17,9 @@ code retrieval with URI schemes.
 integration of the libraries used as well as general
 bugfixing. Also I should probably read the response
 code before trying to process the response and also
-return it alongside the string.
+return it alongside the string. Right now I return
+the bare header and data strings but some processing
+is probably desirable and more user friendly.
 
 ### Contributing
 
