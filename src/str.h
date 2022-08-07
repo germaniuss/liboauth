@@ -86,6 +86,12 @@ char *str_create_fmt(const char *fmt, ...);
 char *str_create_va(const char *fmt, va_list va);
 
 /**
+ * @param len desired length of the string
+ * @return    randomly generated string
+ */
+char *str_create_random(uint32_t len);
+
+/**
  * Deallocate length prefixed string.
  * @param str length prefixed string. str may be NULL.
  */

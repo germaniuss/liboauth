@@ -1,8 +1,65 @@
-#include "utils.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#include <curl/curl.h>
+#include <microhttpd.h>
+
+#include "map.h"
 #include "mutex.h"
 #include "thread.h"
 #include "unordered_map.h"
 #include "timer.h"
+
+#define FOREACH_PLATFORM(PLATFORM) \
+        PLATFORM(WINDOWS)   \
+        PLATFORM(MACOS)     \
+        PLATFORM(LINUX)     \
+        PLATFORM(ANDROID)   \
+        PLATFORM(IOS)       \
+
+#define FOREACH_REQUEST(REQUEST) \
+        REQUEST(POST)       \
+        REQUEST(PUT)        \
+        REQUEST(GET)        \
+        REQUEST(PATCH)      \
+        REQUEST(DELETE)     \
+
+#define GENERATE_ENUM(ENUM) ENUM,
+#define GENERATE_STRING(STRING) #STRING,
+
+typedef enum PLATFORM {
+    FOREACH_PLATFORM(GENERATE_ENUM)
+} PLATFORM;
+
+static const char *PLATFORM_STRING[] = {
+    FOREACH_PLATFORM(GENERATE_STRING)
+};
+
+typedef enum REQUEST {
+    FOREACH_REQUEST(GENERATE_ENUM)
+} REQUEST;
+
+static const char *REQUEST_STRING[] = {
+    FOREACH_REQUEST(GENERATE_STRING)
+};
+
+#if defined(_WIN32) || defined(_WIN64)
+static PLATFORM platform = WINDOWS;
+#elif defined(TARGET_OS_IPHONE)
+static PLATFORM platform = IOS;
+#elif defined(TARGET_OS_MAX) || defined(__APPLE__) || defined(__MACH__)
+static PLATFORM platform = MACOS;
+#elif defined(__ANDROID__)
+static PLATFORM platform = ANDROID;
+#elif defined(__linux__)
+static PLATFORM platform = LINUX;
+#endif
+
+typedef struct response_data {
+    char* data;
+    char* header;
+} response_data;
 
 typedef struct OAuth {
     bool request_run;

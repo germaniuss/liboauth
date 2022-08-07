@@ -2,17 +2,6 @@
 #include <stdlib.h>
 #include "base64.h"
 
-char* base64_url_random(size_t size) {
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    char *str = (char*) malloc(size + 1);
-    if (size) {
-        for (size_t n = 0; n < size; n++) {
-            int key = rand() % (int) (sizeof charset - 1);
-            str[n] = charset[key];
-        } str[size] = '\0';
-    } return str;
-}
-
 char* base64_url_encode(const char *plain) {
 
     if (plain == NULL) return NULL;

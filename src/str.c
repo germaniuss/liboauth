@@ -142,6 +142,20 @@ char *str_create_fmt(const char *fmt, ...)
 	return arr;
 }
 
+char *str_create_random(uint32_t len)
+{
+
+	if (!len) return NULL;
+
+	const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    char *str = str_create_len("", len);
+	for (size_t n = 0; n < len; n++) {
+		str[n] = charset[rand() % (int) (sizeof charset - 1)];
+	} str[len] = '\0';
+
+	return str;
+}
+
 void str_destroy(char **arr)
 {
 	if (arr == NULL || *arr == NULL) {
