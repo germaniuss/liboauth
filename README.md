@@ -10,7 +10,7 @@ access token refresh, state saving, etc.
 - [x] Syncronous API requests with request caching.
 - [x] Simple "All In One" Oauth 2.0 authentication.
 - [x] Supports all major API request types (PUT, PATCH, POST, GET, DELETE...)
-- [x] State saving of "tokens" and other variables (simple .yaml file)
+- [x] State saving of "tokens" and other variables (simple .ini file)
 - [x] Auto refresh "access token" with zero overhead for the user.
 
 ### Missing functionality
