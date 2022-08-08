@@ -102,7 +102,7 @@ void oauth_set_param(OAuth* oauth, const char* key, char* value);
 
 void oauth_start_request_thread(OAuth* oauth);
 void oauth_stop_request_thread(OAuth* oauth);
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache);
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, bool auth);
 
 bool oauth_load(OAuth* oauth, const char* dir, const char* name);
 bool oauth_save(OAuth* oauth, const char* dir, const char* name);

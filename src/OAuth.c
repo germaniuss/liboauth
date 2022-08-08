@@ -255,6 +255,7 @@ enum MHD_Result oauth_get_code (
     enum { MAX_FIELDS = 512 };
     json_t pool[ MAX_FIELDS ];
     const json_t* json = json_create(token_response->data, pool, MAX_FIELDS);
+
     oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
     oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
     oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
@@ -271,7 +272,7 @@ enum MHD_Result oauth_get_code (
 
 OAuth* oauth_create() {
     OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));
-    oauth->authed = true;
+    oauth->authed = false;
     oauth->request_run = false;
     oauth->request_timeout = 250;
     oauth->port = 8000;
@@ -333,7 +334,7 @@ void* oauth_refresh_task(void* in) {
     if (map_contains_key(oauth->params, "client_secret"))
         oauth_append_data(oauth, "client_secret", map_get(oauth->params, "client_secret"));
 
-    response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false);
+    response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, false);
 
     enum { MAX_FIELDS = 512 };
     json_t pool[ MAX_FIELDS ];
@@ -420,7 +421,7 @@ response_data* oauth_post_token(OAuth* oauth, const char* code) {
     oauth_append_data(oauth, "client_id", map_get(oauth->params, "client_id"));
     oauth_append_data(oauth, "grant_type", "authorization_code");
 
-    return oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false);
+    return oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, false);
 }
 
 void oauth_set_param(OAuth* oauth, const char* key, char* value) {
@@ -465,7 +466,7 @@ void oauth_stop_request_thread(OAuth* oauth) {
     thread_term(&oauth->request_thread);
 }
 
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache) {
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, bool auth) {
 
     request_data* rq_data = (request_data*) malloc(sizeof(request_data));
     rq_data->id = NULL;
@@ -482,7 +483,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     } else  {
         mutex_lock(&oauth->request_mutex);
 
-        if (oauth->authed) {
+        if (oauth->authed && auth) {
             const char* str = NULL;
             str_append_fmt(&str, "Authorization: %s %s", map_get(oauth->params, "token_type"), map_get(oauth->params, "access_token"));
             rq_data->header = curl_slist_append(rq_data->header, str);
@@ -552,17 +553,15 @@ int main() {
 
     oauth_load(oauth, "", "TEST");
 
-    oauth_start(oauth);
-
     oauth_start_request_thread(oauth);
 
     oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
 
-    response_data* response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true);
+    response_data* response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true, true);
 
     oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
 
-    response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true);
+    response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true, true);
 
     oauth_delete(oauth);
 }

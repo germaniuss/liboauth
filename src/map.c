@@ -506,7 +506,6 @@ void* map_put(map* my_map, void* key, void* value)
     {
         old_value = target->value;
         target->value = value;
-        
         return old_value; 
     } 
 
