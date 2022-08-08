@@ -3,6 +3,7 @@
 #include "str.h"
 #include "time.h"
 #include "json.h"
+#include "ini.h"
 
 #define MAX_BUFFER 2048 //4KB Buffers
 
@@ -279,7 +280,8 @@ OAuth* oauth_create() {
     mutex_init(&oauth->request_mutex);
     oauth->params = map_alloc(strcmp);
     oauth->data = NULL;
-    oauth->header = NULL;
+    oauth->header_map = NULL;
+    oauth->header_slist = NULL;
     oauth->cache = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
     return oauth;
 }
@@ -289,10 +291,11 @@ void oauth_delete(OAuth* oauth) {
     mutex_term(&oauth->request_mutex);
     map_free(oauth->params);
     if (oauth->data) map_free(oauth->data);
-    if (oauth->header) map_free(oauth->header);
+    if (oauth->header_map) unordered_map_free(oauth->header_map);
     if (oauth->code_challenge) str_destroy(&oauth->code_challenge);
     if (oauth->code_verifier) str_destroy(&oauth->code_verifier);
     unordered_map_free(oauth->cache);
+    if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
 }
 
 bool oauth_start(OAuth* oauth) {
@@ -349,7 +352,7 @@ bool oauth_refresh(OAuth* oauth, uint64_t ms) {
 
     if (ms == 0) {
         oauth_refresh_task(oauth);
-        return;
+        return true;
     }
 
     if (!oauth->refresh_timer.init) timer_init(&oauth->refresh_timer);
@@ -426,7 +429,9 @@ void oauth_set_param(OAuth* oauth, const char* key, char* value) {
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value) {
     char* val = str_create_fmt("%s: %s", key, value);
-    oauth->header = curl_slist_append(oauth->header, val);
+    oauth->header_slist = curl_slist_append(oauth->header_slist, val);
+    if (!oauth->header_map) oauth->header_map = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
+    unordered_map_put(oauth->header_map, key, value);
 }
 
 void oauth_append_data(OAuth* oauth, const char* key, const char* value) {
@@ -466,7 +471,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     rq_data->id = NULL;
     rq_data->data = parse_data(oauth->data, "&");
     rq_data->endpoint = endpoint;
-    rq_data->header = oauth->header;
+    rq_data->header = oauth->header_slist;
     rq_data->method = method;
     str_append_fmt(&rq_data->id, "%s?%s", rq_data->endpoint, rq_data->data);
 
@@ -493,55 +498,48 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     return response;
 }
 
-bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
-    char * line = NULL;
-    size_t len = 0;
-    ssize_t read;
-    const char *token;
+int process_ini(void *arg, int line, const char *section, const char *key, const char *value) {
+    OAuth* oauth = (OAuth*) arg;
+    if (strcmp(section, "Params") == 0) {
+        oauth_set_param(oauth, str_create(key), str_create(value));
+    } else if (strcmp(section, "Header") == 0) {
+        oauth_append_header(oauth, str_create(key), str_create(value));
+    } return 0;
+}
 
+bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
     char* full_dir = NULL;
     if (dir[0] != '\0') str_append(&full_dir, "/");
-    str_append_fmt(&full_dir, "%s.yaml", name);
-
-    FILE * fp = fopen(full_dir, "r");
+    str_append_fmt(&full_dir, "%s.ini", name);
+    int rc = ini_parse_file(oauth, process_ini, full_dir);
     str_destroy(&full_dir);
-    if (fp == NULL) return NULL;
-
-    while (getline(&line, &len, fp) != -1) {
-        char* save = NULL;
-        char* lenline = str_create(line);
-        token = str_token_begin(lenline, &save, ":");
-        char* key_token = str_create(token);
-        str_trim(&key_token, " \n\t\r");
-        token = str_token_begin(lenline, &save, "");
-        char* value_token = str_create(token);
-        str_trim(&value_token, " \n\t\r");
-        oauth_set_param(oauth, key_token, value_token);
-        str_destroy(&lenline);
-    }
-
-    fclose(fp);
-    if (line) free(line);
     oauth_refresh(oauth, 0);
     return oauth;
 }
 
 bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
+    char* key; char* value;
     char* full_dir = NULL;
     if (dir[0] != '\0') str_append(&full_dir, "/");
-    str_append_fmt(&full_dir, "%s.yaml", name);
+    str_append_fmt(&full_dir, "%s.ini", name);
 
     FILE *fp = fopen(full_dir, "w");
     str_destroy(&full_dir);
     if (fp == NULL) return NULL;
 
-    // write to the text file
+    fprintf(fp, "[Params]\n");
     map_iterator* iter = map_iterator_alloc(oauth->params);
-    char* key; char* value;
     while (map_iterator_has_next(iter)) {
         map_iterator_next(iter, &key, &value);
-        fprintf(fp, "%s: %s\n", key, value);
-    }
+        fprintf(fp, "%s=%s\n", key, value);
+    } map_iterator_free(iter);
+
+    fprintf(fp, "\n[Header]\n");
+    iter = unordered_map_iterator_alloc(oauth->header_map);
+    while (unordered_map_iterator_has_next(iter)) {
+        unordered_map_iterator_next(iter, &key, &value);
+        fprintf(fp, "%s=%s\n", key, value);
+    } unordered_map_iterator_free(iter);
         
     // close the file
     fclose(fp);
@@ -554,10 +552,9 @@ int main() {
 
     oauth_load(oauth, "", "TEST");
 
-    oauth_start_request_thread(oauth);
+    oauth_start(oauth);
 
-    oauth_append_header(oauth, "Content-Type", "application/x-www-form-urlencoded");
-    oauth_append_header(oauth, "X-MAL-CLIENT-ID", map_get(oauth->params, "client_id"));
+    oauth_start_request_thread(oauth);
 
     oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
 
