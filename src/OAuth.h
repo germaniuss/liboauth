@@ -66,7 +66,6 @@ typedef struct OAuth {
     unordered_map* request_queue;
     struct thread request_thread;
     struct mutex request_mutex;
-    uint64_t request_timeout;
     unordered_map* cache;
     struct timer refresh_timer;
     map* params;
@@ -76,8 +75,6 @@ typedef struct OAuth {
     char* code_verifier;
     char* code_challenge;
     bool authed;
-    uint64_t port;
-    uint64_t listen_timeout;
 } OAuth;
 
 OAuth* oauth_create();

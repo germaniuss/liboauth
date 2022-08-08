@@ -274,9 +274,6 @@ OAuth* oauth_create() {
     OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));
     oauth->authed = false;
     oauth->request_run = false;
-    oauth->request_timeout = 250;
-    oauth->port = 8000;
-    oauth->listen_timeout = 30;
     oauth->request_queue = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
     mutex_init(&oauth->request_mutex);
     oauth->params = map_alloc(strcmp);
@@ -309,8 +306,8 @@ bool oauth_start(OAuth* oauth) {
     oauth_gen_challenge(oauth);
     struct thread th;
     request_params params;
-    params.port = oauth->port;
-    params.sec = oauth->listen_timeout;
+    params.port = strtol(map_get(oauth->params, "port"), NULL, 10);
+    params.sec = strtol(map_get(oauth->params, "listen_timeout"), NULL, 10);
     params.data = oauth;
     params.request_callback = &oauth_get_code;
     char* url = oauth_auth_url(oauth);
@@ -450,7 +447,7 @@ void* oauth_process_request(void* data) {
         unordered_map_remove(oauth->request_queue, rq_data->id);
         response_data* response = request(rq_data->method, rq_data->endpoint, rq_data->header, rq_data->data);
         unordered_map_put(oauth->cache, rq_data->id, response);
-        time_sleep(oauth->request_timeout);
+        time_sleep(strtol(map_get(oauth->params, "request_timeout"), NULL, 10));
         mutex_unlock(&oauth->request_mutex);
     }
 }
@@ -552,6 +549,7 @@ int main() {
     OAuth* oauth = oauth_create();
 
     oauth_load(oauth, "", "TEST");
+    oauth_save(oauth, "", "TEST");
 
     oauth_start_request_thread(oauth);
 
