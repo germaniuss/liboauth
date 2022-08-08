@@ -1,7 +1,10 @@
 #include "thread.h"
+#include <stdbool.h>
 
 struct timer {
     struct thread th;
+    bool running;
+    bool init;
     int ms;
     void* (*callback) (void*);
     void* data;
