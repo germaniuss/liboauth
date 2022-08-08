@@ -92,6 +92,12 @@ char *str_create_va(const char *fmt, va_list va);
 char *str_create_random(uint32_t len);
 
 /**
+ * @param str string to be encoded
+ * @return    base 64 encoded str.
+ */
+char *str_encode_base64(const char *str);
+
+/**
  * Deallocate length prefixed string.
  * @param str length prefixed string. str may be NULL.
  */

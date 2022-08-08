@@ -1,5 +1,4 @@
 #include "OAuth.h"
-#include "base64.h"
 #include "sha-256.h"
 #include "str.h"
 #include "time.h"
@@ -388,7 +387,7 @@ bool oauth_gen_challenge(OAuth* oauth) {
         oauth->code_verifier = str_create_random(32);
         calc_sha_256(hash, oauth->code_verifier, str_len(oauth->code_verifier));
         hash_to_string(hash_string, hash);
-        oauth->code_challenge = str_create(base64_url_encode(hash_string));
+        oauth->code_challenge = str_encode_base64(hash_string);
         return true;
     } return false;
 }
@@ -553,7 +552,7 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
         printf("Error opening the file %s", dir);
         return NULL;
     }
-
+    while(true);
     // write to the text file
     map_iterator* iter = map_iterator_alloc(oauth->params);
     const char* key; const char* value;

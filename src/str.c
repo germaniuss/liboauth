@@ -156,6 +156,40 @@ char *str_create_random(uint32_t len)
 	return str;
 }
 
+char *str_encode_base64(const char *str) {
+
+	size_t len;
+
+	if (str == NULL || (len = strlen(str)) > STR_MAX) {
+		return NULL;
+	}
+
+	const char base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    char* encoded = (char*) malloc(len);
+    char *p = encoded; int i;
+
+    for (i = 0; i < len - 2; i += 3) {
+        *p++ = base64[(str[i] >> 2) & 0x3F];
+        *p++ = base64[((str[i] & 0x3) << 4) | ((int) (str[i + 1] & 0xF0) >> 4)];
+        *p++ = base64[((str[i + 1] & 0xF) << 2) | ((int) (str[i + 2] & 0xC0) >> 6)];
+        *p++ = base64[str[i + 2] & 0x3F];
+    } 
+
+    if (i < len) {
+        *p++ = base64[(str[i] >> 2) & 0x3F];
+        if (i == (len - 1)) {
+            *p++ = base64[((str[i] & 0x3) << 4)];
+        } else {
+            *p++ = base64[((str[i] & 0x3) << 4) | ((int) (str[i + 1] & 0xF0) >> 4)];
+            *p++ = base64[((str[i + 1] & 0xF) << 2)];
+        }
+    }
+
+    *p++ = '\0';
+
+	return str_create_len(encoded, len);
+}
+
 void str_destroy(char **arr)
 {
 	if (arr == NULL || *arr == NULL) {
