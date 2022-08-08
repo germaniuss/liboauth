@@ -29,8 +29,6 @@ usefull for many others.
 
 ### Next steps
 
-Fix params map not updating with new values
-
 Add error codes to be returned when something fails.
 
 Simplification of the codebase for tighter
