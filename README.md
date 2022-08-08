@@ -27,6 +27,10 @@ module with the same client_id. This may not work on some
 APIs since they might limit incoming trafic but will be
 usefull for many others.
 
+- [ ] Decent return type for the response. Currently the 
+bare header and response are returned. The response code
+and any errors should be handled.
+
 ### Next steps
 
 Add error codes to be returned when something fails.
