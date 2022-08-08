@@ -31,6 +31,8 @@ usefull for many others.
 
 Add error codes to be returned when something fails.
 
+Load file from .ini and add header section.
+
 Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing. 
