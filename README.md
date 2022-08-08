@@ -29,9 +29,9 @@ usefull for many others.
 
 ### Next steps
 
-Add error codes to be returned when something fails.
+Fix params map not updating with new values
 
-Load file from .ini and add header section.
+Add error codes to be returned when something fails.
 
 Simplification of the codebase for tighter
 integration of the libraries used as well as general
