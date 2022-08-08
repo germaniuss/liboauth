@@ -71,7 +71,6 @@ typedef struct OAuth {
     map* params;
     map* data;
     struct curl_slist* header_slist;
-    unordered_map* header_map;
     char* code_verifier;
     char* code_challenge;
     bool authed;

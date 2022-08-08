@@ -278,7 +278,6 @@ OAuth* oauth_create() {
     mutex_init(&oauth->request_mutex);
     oauth->params = map_alloc(strcmp);
     oauth->data = NULL;
-    oauth->header_map = NULL;
     oauth->header_slist = NULL;
     oauth->cache = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
     return oauth;
@@ -289,7 +288,6 @@ void oauth_delete(OAuth* oauth) {
     mutex_term(&oauth->request_mutex);
     map_free(oauth->params);
     if (oauth->data) map_free(oauth->data);
-    if (oauth->header_map) unordered_map_free(oauth->header_map);
     if (oauth->code_challenge) str_destroy(&oauth->code_challenge);
     if (oauth->code_verifier) str_destroy(&oauth->code_verifier);
     unordered_map_free(oauth->cache);
@@ -426,10 +424,8 @@ void oauth_set_param(OAuth* oauth, const char* key, char* value) {
 }
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value) {
-    char* val = str_create_fmt("%s: %s", key, value);
+    char* val = str_create_fmt("%s:%s", key, value);
     oauth->header_slist = curl_slist_append(oauth->header_slist, val);
-    if (!oauth->header_map) oauth->header_map = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
-    unordered_map_put(oauth->header_map, key, value);
 }
 
 void oauth_append_data(OAuth* oauth, const char* key, const char* value) {
@@ -533,11 +529,17 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     } map_iterator_free(iter);
 
     fprintf(fp, "\n[Header]\n");
-    iter = unordered_map_iterator_alloc(oauth->header_map);
-    while (unordered_map_iterator_has_next(iter)) {
-        unordered_map_iterator_next(iter, &key, &value);
-        fprintf(fp, "%s=%s\n", key, value);
-    } unordered_map_iterator_free(iter);
+    struct curl_slist* ptr = oauth->header_slist;
+    while (ptr) {
+        char* save = NULL;
+        char* val = str_create(ptr->data);
+        const char* token = str_token_begin(val, &save, ":");
+        fprintf(fp, token);
+        token = str_token_begin(val, &save, "");
+        fprintf(fp, "=%s\n", token);
+        str_destroy(&val);
+        ptr = ptr->next;
+    }
         
     // close the file
     fclose(fp);
