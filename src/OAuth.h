@@ -70,8 +70,8 @@ typedef struct OAuth {
     unordered_map* cache;
     struct timer refresh_timer;
     map* params;
-    map* header;
     map* data;
+    struct curl_slist* header;
     char* code_verifier;
     char* code_challenge;
     bool authed;
@@ -95,13 +95,13 @@ response_data* oauth_post_token(OAuth* oauth, const char* code);
 bool oauth_start(OAuth* oauth);
 bool oauth_refresh(OAuth* oauth, uint64_t ms);
 
-void oauth_set_header(OAuth* oauth, map* header);
-void oauth_set_data(OAuth* oauth, map* data);
+void oauth_append_header(OAuth* oauth, const char* key, const char* value);
+void oauth_append_data(OAuth* oauth, const char* key, const char* value);
 void oauth_set_param(OAuth* oauth, const char* key, char* value);
 
-void oauth_start_requests(OAuth* oauth);
-void oauth_stop_requests(OAuth* oauth);
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, map* data, map* header);
+void oauth_start_request_thread(OAuth* oauth);
+void oauth_stop_request_thread(OAuth* oauth);
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache);
 
 bool oauth_load(OAuth* oauth, const char* dir, const char* name);
 bool oauth_save(OAuth* oauth, const char* dir, const char* name);

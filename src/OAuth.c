@@ -190,22 +190,8 @@ char* parse_data(map* data, const char* data_join) {
     return data_str;
 }
 
-struct curl_slist* parse_header(map* header) {
-    if (!header) return NULL;
-    char* key; char* value;
-    struct curl_slist* header_list = NULL;
-    map_iterator* header_iter = map_iterator_alloc(header);
-    while (map_iterator_has_next(header_iter)) {
-        map_iterator_next(header_iter, &key, &value);
-        char* data_str;
-        str_append_fmt(&data_str, "%s: %s", key, value);
-        header_list = curl_slist_append(header_list, data_str);
-        str_destroy(&data_str);
-    } map_iterator_free(header_iter);
-    return header_list;
-}
-
 response_data* request(REQUEST method, const char* endpoint, struct curl_slist* header, const char* data) {
+    char* new_endpoint = str_create(endpoint);
     data_t* storage = data_create();
     data_t* header_data = data_create();
     response_data* resp_data = (response_data*) malloc(sizeof(response_data));
@@ -224,9 +210,10 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
         if (method != GET) { 
             curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, REQUEST_STRING[method]);
             curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, data);
-        } else str_append_fmt(endpoint, "?%s", data);
+        } else str_append_fmt(&new_endpoint, "?%s", data);
         
-        curl_easy_setopt(curl, CURLOPT_URL, endpoint);
+        curl_easy_setopt(curl, CURLOPT_URL, new_endpoint);
+
         
         /* Perform the request, res will get the return code */
         CURLcode res;
@@ -247,6 +234,7 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
         curl_easy_cleanup(curl);
         data_clean(storage);
         data_clean(header_data);
+        str_destroy(&new_endpoint);
     } 
     curl_global_cleanup();
     return resp_data;
@@ -266,17 +254,11 @@ enum MHD_Result oauth_get_code (
     enum { MAX_FIELDS = 512 };
     json_t pool[ MAX_FIELDS ];
     const json_t* json = json_create(token_response->data, pool, MAX_FIELDS);
-    map_put(oauth->params, "token_type", str_create(json_value(json, "token_type").string));
-    map_put(oauth->params, "access_token", str_create(json_value(json, "access_token").string));
-    map_put(oauth->params, "refresh_token", str_create(json_value(json, "refresh_token").string));
+    oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
+    oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
+    oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
 
     oauth_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
-
-    char* str = NULL;
-    str_append_fmt(&str, "%s %s", str_dup(map_get(oauth->params, "token_type")), str_dup(map_get(oauth->params, "access_token")));
-    map_put(oauth->header, "Authorization", str);
-    str_destroy(&str);
-
     oauth->authed = true;
 
     const char *page  = "<HTML><HEAD>Return to the app now.</BODY></HTML>";
@@ -288,11 +270,11 @@ enum MHD_Result oauth_get_code (
 
 OAuth* oauth_create() {
     OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));
+    oauth->authed = true;
     oauth->request_run = false;
     oauth->request_timeout = 250;
     oauth->port = 8000;
     oauth->listen_timeout = 30;
-    timer_init(&oauth->refresh_timer);
     oauth->request_queue = unordered_map_alloc(0, 0, unordered_map_hash_str, unordered_map_streq);
     mutex_init(&oauth->request_mutex);
     oauth->params = map_alloc(strcmp);
@@ -303,7 +285,6 @@ OAuth* oauth_create() {
 }
 
 void oauth_delete(OAuth* oauth) {
-    timer_term(&oauth->refresh_timer);
     unordered_map_free(oauth->request_queue);
     mutex_term(&oauth->request_mutex);
     map_free(oauth->params);
@@ -343,31 +324,35 @@ void* oauth_refresh_task(void* in) {
     if (!map_get(oauth->params, "refresh_token") || !map_get(oauth->params, "client_id") || !map_get(oauth->params, "base_token_url"))
         return false;
 
-    map* data = map_alloc(strcmp);
-
-    map_put(data, "client_id", str_dup(map_get(oauth->params, "client_id")));
-    map_put(data, "refresh_token", str_dup(map_get(oauth->params, "refresh_token")));
-    map_put(data, "grant_type", str_create("refresh_token"));
+    oauth_append_data(oauth, "client_id", map_get(oauth->params, "client_id"));
+    oauth_append_data(oauth, "refresh_token", map_get(oauth->params, "refresh_token"));
+    oauth_append_data(oauth, "grant_type", "refresh_token");
     if (map_contains_key(oauth->params, "client_secret"))
-        map_put(data, "client_secret", str_create(map_get(oauth->params, "client_secret")));
+        oauth_append_data(oauth, "client_secret", map_get(oauth->params, "client_secret"));
 
-    response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, data, NULL);
+    response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false);
 
     enum { MAX_FIELDS = 512 };
     json_t pool[ MAX_FIELDS ];
     const json_t* json = json_create(response->data, pool, MAX_FIELDS);
-    map_put(oauth->params, "token_type", str_create(json_value(json, "token_type").string));
-    map_put(oauth->params, "access_token", str_create(json_value(json, "access_token").string));
-    map_put(oauth->params, "refresh_token", str_create(json_value(json, "refresh_token").string));
+    oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
+    oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
+    oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
+    oauth->authed = true;
 
     oauth_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
-
-    map_free(data);
 }
 
 bool oauth_refresh(OAuth* oauth, uint64_t ms) {
     if (!map_get(oauth->params, "refresh_token") || !map_get(oauth->params, "client_id") || !map_get(oauth->params, "base_token_url"))
         return false;
+
+    if (ms == 0) {
+        oauth_refresh_task(oauth);
+        return;
+    }
+
+    if (!oauth->refresh_timer.init) timer_init(&oauth->refresh_timer);
     timer_start(&oauth->refresh_timer, ms, oauth_refresh_task, oauth);
     return true;
 }
@@ -379,7 +364,7 @@ bool oauth_gen_challenge(OAuth* oauth) {
 
     if (strcmp(map_get(oauth->params, "code_challenge_method"), "plain") == 0) {
         oauth->code_verifier = str_create_random(128);
-        oauth->code_challenge = str_dup(oauth->code_verifier);
+        oauth->code_challenge = str_create(oauth->code_verifier);
         return true;
     } else if (strcmp(map_get(oauth->params, "code_challenge_method"), "S256") == 0) {
         uint8_t hash[32];
@@ -397,25 +382,22 @@ char* oauth_auth_url(OAuth* oauth) {
     if (!map_get(oauth->params, "base_auth_url") || !map_get(oauth->params, "client_id"))
         return NULL;
 
-    map* data = map_alloc(strcmp);
-
-    map_put(data, "client_id", str_dup(map_get(oauth->params, "client_id")));
-    map_put(data, "response_type", str_create("code"));
+    oauth_append_data(oauth, "client_id", map_get(oauth->params, "client_id"));
+    oauth_append_data(oauth, "response_type", "code");
     if (map_contains_key(oauth->params, "redirect_uri"))
-        map_put(data, "redirect_uri", str_create(map_get(oauth->params, "redirect_uri")));
+        oauth_append_data(oauth, "redirect_uri", map_get(oauth->params, "redirect_uri"));
     if (map_contains_key(oauth->params, "code_challenge_method")) {
-        map_put(data, "code_challenge_method", str_dup(map_get(oauth->params, "code_challenge_method")));
-        map_put(data, "code_challenge", str_dup(oauth->code_challenge));
+        oauth_append_data(oauth, "code_challenge_method", map_get(oauth->params, "code_challenge_method"));
+        oauth_append_data(oauth, "code_challenge", oauth->code_challenge);
     }
     
-    char* data_str = parse_data(data, "\\&");
-    char* authURL = str_dup(map_get(oauth->params, "base_auth_url"));
+    char* data_str = parse_data(oauth->data, "\\&");
+    char* authURL = str_create(map_get(oauth->params, "base_auth_url"));
     if (data_str != NULL) {
         str_append(&authURL, "?");
         str_append(&authURL, data_str);
     }; str_destroy(&data_str);
 
-    map_free(data);
     return authURL;
 }
 
@@ -424,36 +406,32 @@ response_data* oauth_post_token(OAuth* oauth, const char* code) {
     if (!map_get(oauth->params, "base_token_url") || code == NULL)
         return NULL;
 
-    map* data = map_alloc(strcmp);
-
     if (map_contains_key(oauth->params, "client_secret")) 
-        map_put(data, "client_secret", str_dup(map_get(oauth->params, "client_secret")));
+        oauth_append_data(oauth, "client_secret", map_get(oauth->params, "client_secret"));
     if (map_contains_key(oauth->params, "redirect_uri")) 
-        map_put(data, "redirect_uri", str_dup(map_get(oauth->params, "redirect_uri")));
+        oauth_append_data(oauth, "redirect_uri", map_get(oauth->params, "redirect_uri"));
     if (oauth->code_verifier != 0)
-        map_put(data, "code_verifier", str_dup(oauth->code_verifier));
+        oauth_append_data(oauth, "code_verifier", oauth->code_verifier);
 
-    map_put(data, "code", str_create(code));
-    map_put(data, "client_id", str_dup(map_get(oauth->params, "client_id")));
-    map_put(data, "grant_type", str_create("authorization_code"));
+    oauth_append_data(oauth, "code", code);
+    oauth_append_data(oauth, "client_id", map_get(oauth->params, "client_id"));
+    oauth_append_data(oauth, "grant_type", "authorization_code");
 
-    response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, data, NULL);
-    map_free(data);
-    return response;
+    return oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false);
 }
 
 void oauth_set_param(OAuth* oauth, const char* key, char* value) {
     map_put(oauth->params, (void*) key, (void*) value);
 }
 
-void oauth_set_header(OAuth* oauth, map* header) {
-    map_free(oauth->header);
-    oauth->header = header;
+void oauth_append_header(OAuth* oauth, const char* key, const char* value) {
+    char* val = str_create_fmt("%s: %s", key, value);
+    oauth->header = curl_slist_append(oauth->header, val);
 }
 
-void oauth_set_data(OAuth* oauth, map* data) {
-    map_free(oauth->data);
-    oauth->data = data;
+void oauth_append_data(OAuth* oauth, const char* key, const char* value) {
+    if (!oauth->data) oauth->data = map_alloc(strcmp);
+    map_put(oauth->data, (void*) key, (void*) value);
 }
 
 void* oauth_process_request(void* data) {
@@ -471,28 +449,24 @@ void* oauth_process_request(void* data) {
     }
 }
 
-void oauth_start_requests(OAuth* oauth) {
+void oauth_start_request_thread(OAuth* oauth) {
     oauth->request_run = true;
     thread_init(&oauth->request_thread);
     thread_start(&oauth->request_thread, oauth_process_request, oauth);
 }
 
-void oauth_stop_requests(OAuth* oauth) {
+void oauth_stop_request_thread(OAuth* oauth) {
     oauth->request_run = false;
     thread_term(&oauth->request_thread);
 }
 
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, map* data, map* header) {
-    if (!data && !header) {
-        data = oauth->data;
-        header = oauth->header;
-    }
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache) {
 
     request_data* rq_data = (request_data*) malloc(sizeof(request_data));
     rq_data->id = NULL;
-    rq_data->data = parse_data(data, "&");
+    rq_data->data = parse_data(oauth->data, "&");
     rq_data->endpoint = endpoint;
-    rq_data->header = parse_header(header);
+    rq_data->header = oauth->header;
     rq_data->method = method;
     str_append_fmt(&rq_data->id, "%s?%s", rq_data->endpoint, rq_data->data);
 
@@ -502,10 +476,21 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
             unordered_map_put(oauth->request_queue, rq_data->id, rq_data);
     } else  {
         mutex_lock(&oauth->request_mutex);
+
+        if (oauth->authed) {
+            const char* str = NULL;
+            str_append_fmt(&str, "Authorization: %s %s", map_get(oauth->params, "token_type"), map_get(oauth->params, "access_token"));
+            rq_data->header = curl_slist_append(rq_data->header, str);
+        }
+
         response = request(method, endpoint, rq_data->header, rq_data->data);
         if (cache) unordered_map_put(oauth->cache, rq_data->id, response);
         mutex_unlock(&oauth->request_mutex);
-    } return response;
+    } 
+    
+    map_free(oauth->data);
+    oauth->data = NULL;
+    return response;
 }
 
 bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
@@ -531,7 +516,7 @@ bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
         token = str_token_begin(lenline, &save, "");
         char* value_token = str_create(token);
         str_trim(&value_token, " \n\t\r");
-        map_put(oauth->params, key_token, value_token);
+        oauth_set_param(oauth, key_token, value_token);
         str_destroy(&lenline);
     }
 
@@ -548,14 +533,11 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
 
     FILE *fp = fopen(full_dir, "w");
     str_destroy(&full_dir);
-    if (fp == NULL) {
-        printf("Error opening the file %s", dir);
-        return NULL;
-    }
-    while(true);
+    if (fp == NULL) return NULL;
+
     // write to the text file
     map_iterator* iter = map_iterator_alloc(oauth->params);
-    const char* key; const char* value;
+    char* key; char* value;
     while (map_iterator_has_next(iter)) {
         map_iterator_next(iter, &key, &value);
         fprintf(fp, "%s: %s\n", key, value);
@@ -569,6 +551,21 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
 int main() {
     srand(time_ms());
     OAuth* oauth = oauth_create();
+
     oauth_load(oauth, "", "TEST");
+
+    oauth_start_request_thread(oauth);
+
+    oauth_append_header(oauth, "Content-Type", "application/x-www-form-urlencoded");
+    oauth_append_header(oauth, "X-MAL-CLIENT-ID", map_get(oauth->params, "client_id"));
+
+    oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
+
+    response_data* response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true);
+
+    oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
+
+    response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true);
+
     oauth_delete(oauth);
 }

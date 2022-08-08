@@ -490,7 +490,7 @@ void unordered_map_iterator_free(unordered_map_iterator* iterator)
 }
 
 void* unordered_map_first(unordered_map* map) {
-    return map->head;
+    return map->head->value;
 }
   
 bool unordered_map_empty(unordered_map* map) {

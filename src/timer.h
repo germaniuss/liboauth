@@ -3,7 +3,7 @@
 
 struct timer {
     struct thread th;
-    bool running;
+    bool stopped;
     bool init;
     int ms;
     void* (*callback) (void*);
