@@ -3,7 +3,8 @@
 
 This library is insipred by https://github.com/slugonamission/OAuth2
 but aims to add extra missing functionality like handle browser opening/code retrieval,
-access token refresh, state saving, etc.
+access token refresh, state saving, etc. The project is not working but do expect bugs
+and breaking API changes while the project matures.
 
 ### Working functionality
 
