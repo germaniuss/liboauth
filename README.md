@@ -31,15 +31,11 @@ usefull for many others.
 bare header and response are returned. The response code
 and any errors should be handled.
 
-### Next steps
-
-Add error codes to be returned when something fails.
-
-Simplification of the codebase for tighter
+- [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing. 
 
-Standarization of used libraries and compliance with C99
+- [ ] Standarization of used libraries and compliance with C99
 
 ### Contributing
 
