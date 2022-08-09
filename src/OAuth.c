@@ -511,7 +511,6 @@ bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
     str_append_fmt(&full_dir, "%s.ini", name);
     int rc = ini_parse_file(oauth, process_ini, full_dir);
     str_destroy(&full_dir);
-    oauth_start_refresh(oauth, 0);
     return oauth;
 }
 
@@ -537,7 +536,7 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     while (ptr) {
         char* save = NULL;
         char* val = str_create(ptr->data);
-        const char* key = str_token_begin(val, &save, ":");
+        const char* key = str_create(str_token_begin(val, &save, ":"));
         const char* value = str_token_begin(val, &save, "");
         fprintf(fp, "%s=%s\n", key, value);
         str_destroy(&val);
@@ -554,6 +553,7 @@ int main() {
     OAuth* oauth = oauth_create();
 
     oauth_load(oauth, "", "TEST");
+    oauth_start_refresh(oauth, 0);
     oauth_save(oauth, "", "TEST");
 
     oauth_start_request_thread(oauth);
