@@ -260,7 +260,7 @@ enum MHD_Result oauth_get_code (
     oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
     oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
 
-    oauth_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
+    oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
     oauth->authed = true;
 
     const char *page  = "<HTML><HEAD>Return to the app now.</BODY></HTML>";
@@ -339,10 +339,10 @@ void* oauth_refresh_task(void* in) {
     oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
     oauth->authed = true;
 
-    oauth_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
+    oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
 }
 
-bool oauth_refresh(OAuth* oauth, uint64_t ms) {
+bool oauth_start_refresh(OAuth* oauth, uint64_t ms) {
     if (!map_get(oauth->params, "refresh_token") || !map_get(oauth->params, "client_id") || !map_get(oauth->params, "base_token_url"))
         return false;
 
@@ -354,6 +354,10 @@ bool oauth_refresh(OAuth* oauth, uint64_t ms) {
     if (!oauth->refresh_timer.init) timer_init(&oauth->refresh_timer);
     timer_start(&oauth->refresh_timer, ms, oauth_refresh_task, oauth);
     return true;
+}
+
+bool oauth_stop_refresh(OAuth* oauth) {
+    timer_term(&oauth->refresh_timer);
 }
 
 bool oauth_gen_challenge(OAuth* oauth) {
@@ -507,7 +511,7 @@ bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
     str_append_fmt(&full_dir, "%s.ini", name);
     int rc = ini_parse_file(oauth, process_ini, full_dir);
     str_destroy(&full_dir);
-    oauth_refresh(oauth, 0);
+    oauth_start_refresh(oauth, 0);
     return oauth;
 }
 
@@ -533,10 +537,9 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     while (ptr) {
         char* save = NULL;
         char* val = str_create(ptr->data);
-        const char* token = str_token_begin(val, &save, ":");
-        fprintf(fp, token);
-        token = str_token_begin(val, &save, "");
-        fprintf(fp, "=%s\n", token);
+        const char* key = str_token_begin(val, &save, ":");
+        const char* value = str_token_begin(val, &save, "");
+        fprintf(fp, "%s=%s\n", key, value);
         str_destroy(&val);
         ptr = ptr->next;
     }
@@ -562,6 +565,9 @@ int main() {
     oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
 
     response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true, true);
+
+    oauth_stop_request_thread(oauth);
+    oauth_stop_refresh(oauth);
 
     oauth_delete(oauth);
 }

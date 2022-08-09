@@ -63,14 +63,14 @@ typedef struct response_data {
 
 typedef struct OAuth {
     bool request_run;
+    unordered_map* cache;
     unordered_map* request_queue;
     struct thread request_thread;
     struct mutex request_mutex;
-    unordered_map* cache;
     struct timer refresh_timer;
-    map* params;
-    map* data;
     struct curl_slist* header_slist;
+    map* data;
+    map* params;
     char* code_verifier;
     char* code_challenge;
     bool authed;
@@ -90,7 +90,8 @@ char* oauth_auth_url(OAuth* oauth);
 response_data* oauth_post_token(OAuth* oauth, const char* code);
 
 bool oauth_start(OAuth* oauth);
-bool oauth_refresh(OAuth* oauth, uint64_t ms);
+bool oauth_start_refresh(OAuth* oauth, uint64_t ms);
+bool oauth_stop_refresh(OAuth* oauth);
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value);
 void oauth_append_data(OAuth* oauth, const char* key, const char* value);
