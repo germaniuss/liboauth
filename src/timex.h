@@ -28,10 +28,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef TIME_H
-#define TIME_H
+#ifndef TIMEX_H
+#define TIMEX_H
 
-#define TIME_VERSION "2.0.0"
+#define TIMEX_VERSION "2.0.0"
 
 #include <stdint.h>
 
@@ -39,30 +39,30 @@
  * Wall clock time. Gets CLOCK_REALTIME on Posix.
  * @return current timestamp in milliseconds.
  */
-uint64_t time_ms();
+uint64_t timex_ms();
 
 /**
  * Wall clock time. Gets CLOCK_REALTIME on Posix.
  * @return current timestamp in nanoseconds.
  */
-uint64_t time_ns();
+uint64_t timex_ns();
 
 /**
  * Monotonic timer. Gets CLOCK_MONOTONIC on Posix
  * @return current timestamp in milliseconds.
  */
-uint64_t time_mono_ms();
+uint64_t timex_mono_ms();
 
 /**
  * Monotonic timer. Gets CLOCK_MONOTONIC on Posix
  * @return Current timestamp in nanoseconds.
  */
-uint64_t time_mono_ns();
+uint64_t timex_mono_ns();
 
 /**
  * @param millis milliseconds to sleep.
  * @return '0' on success, negative on failure.
  */
-int time_sleep(uint64_t millis);
+int timex_sleep(uint64_t millis);
 
 #endif

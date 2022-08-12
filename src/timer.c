@@ -1,12 +1,12 @@
 #include "timer.h"
-#include "time.h"
+#include "timex.h"
 
 void* timeit(void* data) {
     struct timer* timer = (struct timer*) data;
     while (timer->init) {
         while (timer->stopped && timer->init);
         if (!timer->init) break;
-        time_sleep(timer->ms);
+        timex_sleep(timer->ms);
         timer->stopped = false;
         timer->callback(timer->data);
     }

@@ -1,22 +1,12 @@
+#ifndef OAUTH_H
+#define OAUTH_H
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-#include <curl/curl.h>
-#include <microhttpd.h>
-
-#include "map.h"
-#include "mutex.h"
-#include "thread.h"
-#include "unordered_map.h"
-#include "timer.h"
-
-#define FOREACH_PLATFORM(PLATFORM) \
-        PLATFORM(WINDOWS)   \
-        PLATFORM(MACOS)     \
-        PLATFORM(LINUX)     \
-        PLATFORM(ANDROID)   \
-        PLATFORM(IOS)       \
+#define OAUTH_VERSION "1.0.0"
 
 #define FOREACH_REQUEST(REQUEST) \
         REQUEST(POST)       \
@@ -28,14 +18,6 @@
 #define GENERATE_ENUM(ENUM) ENUM,
 #define GENERATE_STRING(STRING) #STRING,
 
-typedef enum PLATFORM {
-    FOREACH_PLATFORM(GENERATE_ENUM)
-} PLATFORM;
-
-static const char *PLATFORM_STRING[] = {
-    FOREACH_PLATFORM(GENERATE_STRING)
-};
-
 typedef enum REQUEST {
     FOREACH_REQUEST(GENERATE_ENUM)
 } REQUEST;
@@ -44,52 +26,20 @@ static const char *REQUEST_STRING[] = {
     FOREACH_REQUEST(GENERATE_STRING)
 };
 
-#if defined(_WIN32) || defined(_WIN64)
-static PLATFORM platform = WINDOWS;
-#elif defined(TARGET_OS_IPHONE)
-static PLATFORM platform = IOS;
-#elif defined(TARGET_OS_MAX) || defined(__APPLE__) || defined(__MACH__)
-static PLATFORM platform = MACOS;
-#elif defined(__ANDROID__)
-static PLATFORM platform = ANDROID;
-#elif defined(__linux__)
-static PLATFORM platform = LINUX;
-#endif
-
 typedef struct response_data {
     char* data;
     char* header;
 } response_data;
 
-typedef struct OAuth {
-    bool request_run;
-    unordered_map* cache;
-    unordered_map* request_queue;
-    struct thread request_thread;
-    struct mutex request_mutex;
-    struct timer refresh_timer;
-    struct curl_slist* header_slist;
-    map* data;
-    map* params;
-    char* code_verifier;
-    char* code_challenge;
-    bool authed;
-} OAuth;
+typedef struct OAuth OAuth;
 
 OAuth* oauth_create();
 void oauth_delete(OAuth* oauth);
 
 bool oauth_gen_challenge(OAuth* oauth);
-enum MHD_Result oauth_get_code (
-    void *cls, struct MHD_Connection *connection,
-    const char *url,
-    const char *method, const char *version,
-    const char *upload_data,
-    size_t *upload_data_size, void **con_cls);
 char* oauth_auth_url(OAuth* oauth);
 response_data* oauth_post_token(OAuth* oauth, const char* code);
 
-bool oauth_start(OAuth* oauth);
 bool oauth_start_refresh(OAuth* oauth, uint64_t ms);
 bool oauth_stop_refresh(OAuth* oauth);
 
@@ -103,3 +53,5 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
 
 bool oauth_load(OAuth* oauth, const char* dir, const char* name);
 bool oauth_save(OAuth* oauth, const char* dir, const char* name);
+
+#endif

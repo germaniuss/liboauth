@@ -42,7 +42,7 @@
 
 struct mutex {
 #if defined(_WIN32) || defined(_WIN64)
-	CRITICAL_SECTION mtx;
+	CRITICAL_SECTION critical_section;
 #else
 	pthread_mutex_t mtx;
 #endif

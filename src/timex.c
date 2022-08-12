@@ -32,7 +32,7 @@
 #define _XOPEN_SOURCE 700
 #endif
 
-#include "time.h"
+#include "timex.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <assert.h>
@@ -44,7 +44,7 @@
 #include <time.h>
 #endif
 
-uint64_t time_ms()
+uint64_t timex_ms()
 {
 #if defined(_WIN32) || defined(_WIN64)
 	FILETIME ft;
@@ -67,7 +67,7 @@ uint64_t time_ms()
 #endif
 }
 
-uint64_t time_ns()
+uint64_t timex_ns()
 {
 #if defined(_WIN32) || defined(_WIN64)
 	FILETIME ft;
@@ -90,7 +90,7 @@ uint64_t time_ns()
 #endif
 }
 
-uint64_t time_mono_ms()
+uint64_t timex_mono_ms()
 {
 #if defined(_WIN32) || defined(_WIN64)
 	//  System frequency does not change at run-time, cache it
@@ -117,7 +117,7 @@ uint64_t time_mono_ms()
 #endif
 }
 
-uint64_t time_mono_ns()
+uint64_t timex_mono_ns()
 {
 #if defined(_WIN32) || defined(_WIN64)
 	static int64_t frequency = 0;
@@ -142,7 +142,7 @@ uint64_t time_mono_ns()
 #endif
 }
 
-int time_sleep(uint64_t millis)
+int timex_sleep(uint64_t millis)
 {
 #if defined(_WIN32) || defined(_WIN64)
 	Sleep((DWORD) millis);

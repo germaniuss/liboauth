@@ -1,11 +1,33 @@
+#include <curl/curl.h>
+
 #include "OAuth.h"
 #include "sha-256.h"
 #include "str.h"
 #include "time.h"
 #include "json.h"
 #include "ini.h"
+#include "map.h"
+#include "mutex.h"
+#include "thread.h"
+#include "unordered_map.h"
+#include "timer.h"
 
 #define MAX_BUFFER 2048 //4KB Buffers
+
+typedef struct OAuth {
+    bool request_run;
+    unordered_map* cache;
+    unordered_map* request_queue;
+    struct thread request_thread;
+    struct mutex request_mutex;
+    struct timer refresh_timer;
+    struct curl_slist* header_slist;
+    map* data;
+    map* params;
+    char* code_verifier;
+    char* code_challenge;
+    bool authed;
+} OAuth;
 
 typedef struct request_data {
     char* data;
@@ -20,86 +42,6 @@ typedef struct data_t {
     struct data_t* next;
     int idx;
 } data_t;
-
-typedef struct request_params {
-    int port;
-    int sec;
-    MHD_AccessHandlerCallback request_callback;
-    void* data;
-} request_params;
-
-bool openBrowser(const char* url) {
-    char* command;
-    switch(platform) {
-        case WINDOWS:
-            command = str_create("explorer ");
-            break;
-        case MACOS:
-            command = str_create("open ");
-            break;
-        case LINUX:
-            command = str_create("xdg-open ");
-            break;
-        case ANDROID:
-            command = str_create("start --user 0 com.android.browser/com.android.browser.BrowserActivity -a android.intent.action.VIEW -d ");
-            break;
-        case IOS:
-            command = str_create(" ");
-            break;
-        default:
-            return false;
-    }
-
-    str_append(&command, url); /* add the extension */
-    system(command);
-    str_destroy(&command);
-    return true;
-}
-
-// THIS IS RELATED TO REQUESTS
-
-void request_completed (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode code) {
-  int *done = (int *)cls;
-  *done = 1;
-}
-
-void* acceptSingleRequest(void* params) {
-    request_params* prms = (request_params*) params;
-    struct MHD_Daemon *d;
-    fd_set rs;
-    fd_set ws;
-    fd_set es;
-    MHD_socket max;
-    time_t start;
-    struct timeval tv;
-    int done = 0;
-
-    d = MHD_start_daemon (MHD_USE_ERROR_LOG, prms->port, NULL, NULL, prms->request_callback, prms->data, MHD_OPTION_NOTIFY_COMPLETED, &request_completed, &done, MHD_OPTION_END);
-    if (d == NULL) {
-        fprintf(stderr, "MHD_start_daemon() failed\n");
-        return NULL;
-    }
-
-    start = time (NULL);
-    while ((time (NULL) - start < prms->sec) && done == 0) {
-        max = 0;
-        FD_ZERO (&rs);
-        FD_ZERO (&ws);
-        FD_ZERO (&es);
-        if (MHD_YES != MHD_get_fdset (d, &rs, &ws, &es, &max)) {
-            MHD_stop_daemon (d);
-            fprintf(stderr, "MHD_get_fdset() failed\n");
-            return NULL;
-        }
-        tv.tv_sec = 0;
-        tv.tv_usec = 1000;
-        select(max + 1, &rs, &ws, &es, &tv);
-        MHD_run (d);
-    } 
-    
-    MHD_stop_daemon (d);
-    return (void*) 1;
-}
 
 // THIS IS ALL RELATED TO GET AND HTTPS RESPONSE AND PROCESS THE STRING DATA
 
@@ -241,35 +183,6 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
     return resp_data;
 }
 
-enum MHD_Result oauth_get_code (
-    void *cls, struct MHD_Connection *connection,
-    const char *url,
-    const char *method, const char *version,
-    const char *upload_data,
-    size_t *upload_data_size, void **con_cls) 
-{
-    OAuth* oauth = (OAuth*) cls;
-    response_data* token_response = oauth_post_token(oauth, 
-        MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "code")); 
-
-    enum { MAX_FIELDS = 512 };
-    json_t pool[ MAX_FIELDS ];
-    const json_t* json = json_create(token_response->data, pool, MAX_FIELDS);
-
-    oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
-    oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
-    oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
-
-    oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
-    oauth->authed = true;
-
-    const char *page  = "<HTML><HEAD>Return to the app now.</BODY></HTML>";
-    struct MHD_Response *response = MHD_create_response_from_buffer (strlen (page), (void*) page, MHD_RESPMEM_PERSISTENT);
-    int ret = MHD_queue_response (connection, MHD_HTTP_OK, response);
-    MHD_destroy_response (response);
-    return ret;
-}
-
 OAuth* oauth_create() {
     OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));
     oauth->authed = false;
@@ -292,29 +205,6 @@ void oauth_delete(OAuth* oauth) {
     if (oauth->code_verifier) str_destroy(&oauth->code_verifier);
     unordered_map_free(oauth->cache);
     if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
-}
-
-bool oauth_start(OAuth* oauth) {
-
-    if (!map_get(oauth->params, "base_auth_url")  || 
-        !map_get(oauth->params, "base_token_url") || 
-        !map_get(oauth->params, "client_id")
-    ) return false;
-
-    oauth_gen_challenge(oauth);
-    struct thread th;
-    request_params params;
-    params.port = strtol(map_get(oauth->params, "port"), NULL, 10);
-    params.sec = strtol(map_get(oauth->params, "listen_timeout"), NULL, 10);
-    params.data = oauth;
-    params.request_callback = &oauth_get_code;
-    char* url = oauth_auth_url(oauth);
-    thread_init(&th);
-    thread_start(&th, acceptSingleRequest, (void*) &params);
-    openBrowser(url);
-    str_destroy(&url);
-    thread_join(&th, NULL);
-    return true;
 }
 
 void* oauth_refresh_task(void* in) {
@@ -385,6 +275,8 @@ char* oauth_auth_url(OAuth* oauth) {
     if (!map_get(oauth->params, "base_auth_url") || !map_get(oauth->params, "client_id"))
         return NULL;
 
+    oauth_gen_challenge(oauth);
+
     oauth_append_data(oauth, "client_id", map_get(oauth->params, "client_id"));
     oauth_append_data(oauth, "response_type", "code");
     if (map_contains_key(oauth->params, "redirect_uri"))
@@ -447,7 +339,7 @@ void* oauth_process_request(void* data) {
         unordered_map_remove(oauth->request_queue, rq_data->id);
         response_data* response = request(rq_data->method, rq_data->endpoint, rq_data->header, rq_data->data);
         unordered_map_put(oauth->cache, rq_data->id, response);
-        time_sleep(strtol(map_get(oauth->params, "request_timeout"), NULL, 10));
+        timex_sleep(strtol(map_get(oauth->params, "request_timeout"), NULL, 10));
         mutex_unlock(&oauth->request_mutex);
     }
 }
@@ -546,28 +438,4 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     // close the file
     fclose(fp);
     return 1;
-}
-
-int main() {
-    srand(time_ms());
-    OAuth* oauth = oauth_create();
-
-    oauth_load(oauth, "", "TEST");
-    oauth_start_refresh(oauth, 0);
-    oauth_save(oauth, "", "TEST");
-
-    oauth_start_request_thread(oauth);
-
-    oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
-
-    response_data* response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true, true);
-
-    oauth_append_data(oauth, "fields", "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,nsfw,created_at,updated_at,media_type,status,genres,my_list_status,num_episodes,start_season,broadcast,source,average_episode_duration,rating,pictures,background,related_anime,related_manga,recommendations,studios,statistics");
-
-    response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/30230", true, true);
-
-    oauth_stop_request_thread(oauth);
-    oauth_stop_refresh(oauth);
-
-    oauth_delete(oauth);
 }
