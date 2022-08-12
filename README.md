@@ -1,15 +1,16 @@
-# anioauth
-### Minimal C oauth 2.0 authentication ilbrary using libcurl and libmicrohttpd
+# liboauth
+### Minimal C oauth 2.0 authentication ilbrary using libcurl
 
 This library is insipred by https://github.com/slugonamission/OAuth2
-but aims to add extra missing functionality like handle browser opening/code retrieval,
-access token refresh, state saving, etc. The project is now working but do expect bugs
+but aims to add extra missing functionality like access token refresh, 
+state saving, response caching, etc.
+The project is now working but do expect bugs
 and breaking API changes while the project matures.
 
 ### Working functionality
 
 - [x] Syncronous API requests with request caching.
-- [x] Simple "All In One" Oauth 2.0 authentication.
+- [x] Compatibility with my URI scheme handler.
 - [x] Supports all major API request types (PUT, PATCH, POST, GET, DELETE...)
 - [x] State saving of "tokens" and other variables (simple .ini file)
 - [x] Auto refresh "access token" with zero overhead for the user.
@@ -18,10 +19,6 @@ and breaking API changes while the project matures.
 
 - [ ] Handling on auth callback different than
 application/json (AKA XML)
-
-- [ ] Better handling on browser opening and
-code retrieval with URI schemes (may keep the old
-method after implementation)
 
 - [ ] Add async request support for the same oauth
 module with the same client_id. This may not work on some
@@ -34,9 +31,10 @@ and any errors should be handled.
 
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
-bugfixing. 
+bugfixing (remove all unnecessary libraries and compile
+with MinGW on Windows). 
 
-- [ ] Standarization of used libraries and compliance with C99
+- [ ] Compatibility with Windows/Linux/Apple
 
 ### Contributing
 
