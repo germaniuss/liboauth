@@ -3,7 +3,7 @@
 #include "OAuth.h"
 #include "sha-256.h"
 #include "str.h"
-#include "time.h"
+#include "timex.h"
 #include "json.h"
 #include "ini.h"
 #include "map.h"
@@ -388,7 +388,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     return response;
 }
 
-int process_ini(void *arg, int line, const char *section, const char *key, const char *value) {
+int oauth_process_ini(void *arg, int line, const char *section, const char *key, const char *value) {
     OAuth* oauth = (OAuth*) arg;
     if (strcmp(section, "Params") == 0) {
         oauth_set_param(oauth, str_create(key), str_create(value));
@@ -401,7 +401,7 @@ bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
     char* full_dir = NULL;
     if (dir[0] != '\0') str_append(&full_dir, "/");
     str_append_fmt(&full_dir, "%s.ini", name);
-    int rc = ini_parse_file(oauth, process_ini, full_dir);
+    int rc = ini_parse_file(oauth, oauth_process_ini, full_dir);
     str_destroy(&full_dir);
     return oauth;
 }
