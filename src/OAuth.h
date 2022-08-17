@@ -38,7 +38,7 @@ void oauth_delete(OAuth* oauth);
 
 bool oauth_gen_challenge(OAuth* oauth);
 char* oauth_auth_url(OAuth* oauth);
-response_data* oauth_post_token(OAuth* oauth, const char* code);
+void oauth_auth(OAuth* oauth, const char* code);
 
 bool oauth_start_refresh(OAuth* oauth, uint64_t ms);
 bool oauth_stop_refresh(OAuth* oauth);

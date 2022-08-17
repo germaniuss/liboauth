@@ -11,6 +11,7 @@
 #include "thread.h"
 #include "unordered_map.h"
 #include "timer.h"
+#include "path.h"
 
 #define MAX_BUFFER 2048 //4KB Buffers
 
@@ -277,28 +278,19 @@ char* oauth_auth_url(OAuth* oauth) {
 
     oauth_gen_challenge(oauth);
 
-    oauth_append_data(oauth, "client_id", map_get(oauth->params, "client_id"));
-    oauth_append_data(oauth, "response_type", "code");
+    char* authURL = str_create_fmt("%s?client_id=%s\\&response_type=code", map_get(oauth->params, "base_auth_url"), map_get(oauth->params, "client_id"));
+
     if (map_contains_key(oauth->params, "redirect_uri"))
-        oauth_append_data(oauth, "redirect_uri", map_get(oauth->params, "redirect_uri"));
-    if (map_contains_key(oauth->params, "code_challenge_method")) {
-        oauth_append_data(oauth, "code_challenge_method", map_get(oauth->params, "code_challenge_method"));
-        oauth_append_data(oauth, "code_challenge", oauth->code_challenge);
-    }
-    
-    char* data_str = parse_data(oauth->data, "\\&");
-    char* authURL = str_create(map_get(oauth->params, "base_auth_url"));
-    if (data_str != NULL) {
-        str_append(&authURL, "?");
-        str_append(&authURL, data_str);
-    }; str_destroy(&data_str);
+        str_append_fmt(&authURL, "\\&redirect_uri=", map_get(oauth->params, "redirect_uri"));
+    if (map_contains_key(oauth->params, "code_challenge_method"))
+        str_append_fmt(&authURL, "\\&code_challenge_method=%s\\&code_challenge=%s", map_get(oauth->params, "code_challenge_method"), oauth->code_challenge);
 
     return authURL;
 }
 
 response_data* oauth_post_token(OAuth* oauth, const char* code) {
 
-    if (!map_get(oauth->params, "base_token_url") || code == NULL)
+    if (!map_get(oauth->params, "base_token_url") || !map_get(oauth->params, "client_id") || code == NULL)
         return NULL;
 
     if (map_contains_key(oauth->params, "client_secret")) 
@@ -313,6 +305,18 @@ response_data* oauth_post_token(OAuth* oauth, const char* code) {
     oauth_append_data(oauth, "grant_type", "authorization_code");
 
     return oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, false);
+}
+
+void oauth_auth(OAuth* oauth, const char* code) {
+    response_data* response = oauth_post_token(oauth, code);
+    
+    json_t buf[20];
+    const json_t* obj = json_create(response->data, buf, 20);
+    oauth_set_param(oauth, "access_token", json_value(obj, "access_token").string);
+    oauth_set_param(oauth, "refresh_token", json_value(obj, "refresh_token").string);
+    oauth_set_param(oauth, "token_type", json_value(obj, "token_type").string);
+
+    oauth_start_refresh(oauth, json_value(obj, "expires_in").integer);
 }
 
 void oauth_set_param(OAuth* oauth, const char* key, char* value) {
@@ -379,6 +383,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
         }
 
         response = request(method, endpoint, rq_data->header, rq_data->data);
+
         if (cache) unordered_map_put(oauth->cache, rq_data->id, response);
         mutex_unlock(&oauth->request_mutex);
     } 
@@ -398,9 +403,10 @@ int oauth_process_ini(void *arg, int line, const char *section, const char *key,
 }
 
 bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
-    char* full_dir = NULL;
-    if (dir[0] != '\0') str_append(&full_dir, "/");
-    str_append_fmt(&full_dir, "%s.ini", name);
+    char* full_dir = getexecdir();
+    path_add(&full_dir, dir);
+    path_add(&full_dir, name);
+    str_append(&full_dir, ".ini");
     int rc = ini_parse_file(oauth, oauth_process_ini, full_dir);
     str_destroy(&full_dir);
     return oauth;
@@ -408,9 +414,10 @@ bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
 
 bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     char* key; char* value;
-    char* full_dir = NULL;
-    if (dir[0] != '\0') str_append(&full_dir, "/");
-    str_append_fmt(&full_dir, "%s.ini", name);
+    char* full_dir = getexecdir();
+    path_add(&full_dir, dir);
+    path_add(&full_dir, name);
+    str_append(&full_dir, ".ini");
 
     FILE *fp = fopen(full_dir, "w");
     str_destroy(&full_dir);

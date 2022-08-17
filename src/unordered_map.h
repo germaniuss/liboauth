@@ -118,8 +118,8 @@ extern "C" {
     size_t unordered_map_hash_64(uint64_t a);
     size_t unordered_map_hash_str(const char *key);
 
-    static inline bool unordered_map_eq(uint64_t a, uint64_t b) {return (a) == (b);};
-    static inline bool unordered_map_streq(const char* a, const char* b) {return !strcmp(a, b);};
+    static inline bool unordered_map_eq(uint64_t a, uint64_t b) {return (a) == (b);}
+    static inline bool unordered_map_streq(const char* a, const char* b) {return !strcmp(a, b);}
 
 #ifdef	__cplusplus
 }
