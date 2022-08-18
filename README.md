@@ -33,7 +33,7 @@ and any errors should be handled.
 integration of the libraries used as well as general
 bugfixing (remove all unnecessary libraries). 
 
-- [ ] Compatibility with Windows/Linux/Apple
+- [ ] <b>IMPORTANT</b> Compatibility with Windows/Linux/Apple
 
 ### Contributing
 
