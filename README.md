@@ -31,13 +31,7 @@ and any errors should be handled.
 
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
-bugfixing (remove all unnecessary libraries and compile
-with MinGW on Windows). 
-
-- [ ] Think of a way to handle caching for related post/get 
-requests (e.g. update number of watched episodes to 9, get number
-of whatched episodes; in this scenario we want to cache the fact
-that we watched 9 episodes for the get request)
+bugfixing (remove all unnecessary libraries). 
 
 - [ ] Compatibility with Windows/Linux/Apple
 
