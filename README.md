@@ -37,7 +37,8 @@ bugfixing (remove all unnecessary libraries).
 
 ### Contributing
 
-Any contribution is welcome and should be done through a pull request.
+Any contribution is welcome and should be done through a pull request. Currently
+help is mostly needed with request error handling and documentation.
 
 ### Cretit
 
