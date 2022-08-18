@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "map.h"
 
 #define OAUTH_VERSION "1.0.0"
 
