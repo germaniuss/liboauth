@@ -14,6 +14,7 @@ and breaking API changes while the project matures.
 - [x] Supports all major API request types (PUT, PATCH, POST, GET, DELETE...)
 - [x] State saving of "tokens" and other variables (simple .ini file)
 - [x] Auto refresh "access token" with zero overhead for the user.
+- [x] Cross-compatibility with Windows/Apple/Linux
 
 ### Missing functionality
 
@@ -32,8 +33,6 @@ and any errors should be handled.
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing (remove all unnecessary libraries). 
-
-- [ ] <b>IMPORTANT</b> Compatibility with Windows/Linux/Apple
 
 ### Contributing
 
