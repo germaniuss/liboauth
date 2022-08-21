@@ -26,6 +26,9 @@ module with the same client_id. This may not work on some
 APIs since they might limit incoming trafic but will be
 usefull for many others.
 
+- [ ] Add cache saving between sessions. Add limit to
+cache size to avoid overloading memory.
+
 - [ ] <b>IMPORTANT</b> Decent return type for the response. Currently the 
 bare header and response are returned. The response code
 and any errors should be handled.
