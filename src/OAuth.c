@@ -27,6 +27,7 @@ typedef struct OAuth {
     map* params;
     char* code_verifier;
     char* code_challenge;
+    char* config_file;
     bool authed;
 } OAuth;
 
@@ -230,7 +231,11 @@ void* oauth_refresh_task(void* in) {
     oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
     oauth->authed = true;
 
-    oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
+    if (*(char*) map_get(oauth->params, "save_on_refresh") == 't')
+        oauth_save(oauth);
+
+    if (*(char*) map_get(oauth->params, "refresh_on_refresh") == 't')
+        oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
 }
 
 bool oauth_start_refresh(OAuth* oauth, uint64_t ms) {
@@ -316,7 +321,8 @@ void oauth_auth(OAuth* oauth, const char* code) {
     oauth_set_param(oauth, "refresh_token", json_value(obj, "refresh_token").string);
     oauth_set_param(oauth, "token_type", json_value(obj, "token_type").string);
 
-    oauth_start_refresh(oauth, json_value(obj, "expires_in").integer);
+    if (*(char*) map_get(oauth->params, "refresh_on_auth") == 't')
+        oauth_start_refresh(oauth, (json_value(obj, "expires_in").integer * 2000)/3);
 }
 
 void oauth_set_param(OAuth* oauth, const char* key, char* value) {
@@ -402,25 +408,32 @@ int oauth_process_ini(void *arg, int line, const char *section, const char *key,
     } return 0;
 }
 
-bool oauth_load(OAuth* oauth, const char* dir, const char* name) {
-    char* full_dir = getexecdir();
-    path_add(&full_dir, dir);
-    path_add(&full_dir, name);
-    str_append(&full_dir, ".ini");
-    int rc = ini_parse_file(oauth, oauth_process_ini, full_dir);
-    str_destroy(&full_dir);
-    return oauth;
+void oauth_config_dir(OAuth* oauth, const char* dir, const char* name) {
+    oauth->config_file = getexecdir();
+    path_add(&oauth->config_file, dir);
+    path_add(&oauth->config_file, name);
+    str_append(&oauth->config_file, ".ini");
 }
 
-bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
-    char* key; char* value;
-    char* full_dir = getexecdir();
-    path_add(&full_dir, dir);
-    path_add(&full_dir, name);
-    str_append(&full_dir, ".ini");
+bool oauth_load(OAuth* oauth) {
 
-    FILE *fp = fopen(full_dir, "w");
-    str_destroy(&full_dir);
+    if (oauth->config_file == NULL) 
+        return NULL;
+
+    int rc = ini_parse_file(oauth, oauth_process_ini, oauth->config_file);
+    if (*(char*) map_get(oauth->params, "refresh_on_load") == 't' && 
+        *(char*) map_get(oauth->params, "refresh_token") != '\0')
+        oauth_start_refresh(oauth, 0);
+    return oauth->authed;
+}
+
+bool oauth_save(OAuth* oauth) {
+
+    if (oauth->config_file == NULL) 
+        return NULL;
+
+    char* key; char* value;
+    FILE *fp = fopen(oauth->config_file, "w");
     if (fp == NULL) return NULL;
 
     fprintf(fp, "[Params]\n");
@@ -435,10 +448,11 @@ bool oauth_save(OAuth* oauth, const char* dir, const char* name) {
     while (ptr) {
         char* save = NULL;
         char* val = str_create(ptr->data);
-        const char* key = str_create(str_token_begin(val, &save, ":"));
-        const char* value = str_token_begin(val, &save, "");
+        key = str_create(str_token_begin(val, &save, ":"));
+        value = str_token_begin(val, &save, "");
         fprintf(fp, "%s=%s\n", key, value);
         str_destroy(&val);
+        str_destroy(&key);
         ptr = ptr->next;
     }
         
