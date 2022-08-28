@@ -120,6 +120,14 @@ size_t process_response(void *ptr, size_t size, size_t nmemb, void *userdata) {
     return max;
 }
 
+response_data* copy_response(response_data* response) {
+    response_data* response_copy = (response_data*) malloc(sizeof(response_data));
+    response_copy->data = response->data;
+    response_copy->content_type = response->content_type;
+    response_copy->response_code = response->response_code;
+    return response_copy;
+}
+
 // THIS IS ALL RELATED TO HEADER AND DATA
 
 char* parse_data(map* data, const char* data_join) {
@@ -236,7 +244,10 @@ void* oauth_refresh_task(void* in) {
         oauth_append_data(oauth, "client_secret", map_get(oauth->params, "client_secret"));
 
     response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, false);
-    oauth_parse_auth(oauth, response);
+    if (response && response->response_code == 200) {
+        oauth_parse_auth(oauth, response);
+        free(response);
+    }
 }
 
 bool oauth_start_refresh(OAuth* oauth, uint64_t ms) {
@@ -315,7 +326,10 @@ response_data* oauth_post_token(OAuth* oauth, const char* code) {
 
 void oauth_auth(OAuth* oauth, const char* code) {
     response_data* response = oauth_post_token(oauth, code);
-    oauth_parse_auth(oauth, response);
+    if (response && response->response_code == 200) {
+        oauth_parse_auth(oauth, response);
+        free(response);
+    }
 }
 
 void oauth_set_param(OAuth* oauth, const char* key, char* value) {
@@ -341,8 +355,12 @@ void* oauth_process_request(void* data) {
         request_data* rq_data = unordered_map_first(oauth->request_queue);
         unordered_map_remove(oauth->request_queue, rq_data->id);
         response_data* response = request(rq_data->method, rq_data->endpoint, rq_data->header, rq_data->data);
-        if (response && response->response_code == 200) // also have to delete old response value
+        if (response && response->response_code == 200) {
+            response_data* old_response;
+            if (old_response = unordered_map_get(oauth->cache, rq_data->id))
+                free(old_response);
             unordered_map_put(oauth->cache, rq_data->id, response);
+        }  
         timex_sleep(strtol(map_get(oauth->params, "request_timeout"), NULL, 10));
         mutex_unlock(&oauth->request_mutex);
     }
@@ -371,6 +389,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
 
     response_data* response;
     if (cache && (response = unordered_map_get(oauth->cache, rq_data->id))) {
+        response = copy_response(response);
         if (!unordered_map_contains_key(oauth->request_queue, rq_data->id))
             unordered_map_put(oauth->request_queue, rq_data->id, rq_data);
     } else  {
@@ -380,8 +399,10 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
             str_append_fmt(&str, "Authorization: %s %s", map_get(oauth->params, "token_type"), map_get(oauth->params, "access_token"));
             rq_data->header = curl_slist_append(rq_data->header, str);
         } response = request(method, endpoint, rq_data->header, rq_data->data);
-        if (response && cache && response->response_code == 200)
+        if (response && cache && response->response_code == 200) {
             unordered_map_put(oauth->cache, rq_data->id, response);
+            response = copy_response(response);
+        } 
         mutex_unlock(&oauth->request_mutex);
     }
     
