@@ -7,6 +7,14 @@ state saving, response caching, etc.
 The project is now working but do expect bugs
 and breaking API changes while the project matures.
 
+Note that for the full functionality it is expected you use some other library
+to extract the code from the redirect uri. It is recommended to use my scheme
+registering and handling library however, other awesome options exist.
+
+[libschemehandler](https://github.com/germaniuss/libschemehandler): Lightweight scheme registering and handling library with no extra dependencies (<b>LICENSE MIT</b>)
+[Ultralight](https://ultralig.ht/): Lightweight and powerfull embeded browser library (formerly awesomium) (<b>TRIPLE LICENSE</b>)
+[libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/): Lightweight and simple HTTP server library written in ansi C and perfect for embedded systems (<b>LICENSE GPL-3</b>)
+
 ### Working functionality
 
 - [x] Syncronous API requests with request caching.
@@ -14,6 +22,7 @@ and breaking API changes while the project matures.
 - [x] Supports all major API request types (PUT, PATCH, POST, GET, DELETE...)
 - [x] State saving of "tokens" and other variables (simple .ini file)
 - [x] Auto refresh "access token" with zero overhead for the user.
+- [x] Cross-compatibility with Windows/Apple/Linux
 
 ### Missing functionality
 
@@ -25,25 +34,21 @@ module with the same client_id. This may not work on some
 APIs since they might limit incoming trafic but will be
 usefull for many others.
 
-- [ ] Decent return type for the response. Currently the 
+- [ ] <b>IMPORTANT</b> Add cache saving between sessions. Add limit to
+cache size to avoid overloading memory.
+
+- [ ] <b>IMPORTANT</b> Decent return type for the response. Currently the 
 bare header and response are returned. The response code
 and any errors should be handled.
 
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
-bugfixing (remove all unnecessary libraries and compile
-with MinGW on Windows). 
-
-- [ ] Think of a way to handle caching for related post/get 
-requests (e.g. update number of watched episodes to 9, get number
-of whatched episodes; in this scenario we want to cache the fact
-that we watched 9 episodes for the get request)
-
-- [ ] Compatibility with Windows/Linux/Apple
+bugfixing (remove all unnecessary libraries). 
 
 ### Contributing
 
-Any contribution is welcome and should be done through a pull request.
+Any contribution is welcome and should be done through a pull request. Currently
+help is mostly needed with request error handling and documentation.
 
 ### Cretit
 

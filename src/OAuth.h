@@ -8,12 +8,12 @@
 
 #define OAUTH_VERSION "1.0.0"
 
-#define FOREACH_REQUEST(REQUEST) \
-        REQUEST(POST)       \
-        REQUEST(PUT)        \
-        REQUEST(GET)        \
-        REQUEST(PATCH)      \
-        REQUEST(DELETE)     \
+#define FOREACH_REQUEST(RQ) \
+        RQ(POST)       \
+        RQ(PUT)        \
+        RQ(GET)        \
+        RQ(PATCH)      \
+        RQ(DEL)        \
 
 #define GENERATE_ENUM(ENUM) ENUM,
 #define GENERATE_STRING(STRING) #STRING,

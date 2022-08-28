@@ -336,7 +336,7 @@ void oauth_append_header(OAuth* oauth, const char* key, const char* value) {
 
 void oauth_append_data(OAuth* oauth, const char* key, const char* value) {
     if (!oauth->data) oauth->data = map_alloc(strcmp);
-    map_put(oauth->data, (void*) key, (void*) value);
+    map_put(oauth->data, key, value);
 }
 
 void* oauth_process_request(void* data) {
