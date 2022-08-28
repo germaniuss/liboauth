@@ -18,8 +18,8 @@ static const char *REQUEST_STRING[] = {
 
 typedef struct response_data {
     const char* data;
-    const char* header;
-    int error_code;
+    const char* content_type;
+    long response_code;
 } response_data;
 
 typedef struct OAuth OAuth;

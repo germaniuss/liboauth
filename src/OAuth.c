@@ -138,8 +138,7 @@ char* parse_data(map* data, const char* data_join) {
 response_data* request(REQUEST method, const char* endpoint, struct curl_slist* header, const char* data) {
     char* new_endpoint = str_create(endpoint);
     data_t* storage = data_create();
-    data_t* header_data = data_create();
-    response_data* resp_data = (response_data*) malloc(sizeof(response_data));
+    response_data* response = (response_data*) malloc(sizeof(response_data));
 
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
@@ -148,8 +147,6 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
         if (header != NULL) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, process_response);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, storage);
-        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, process_response);
-        curl_easy_setopt(curl, CURLOPT_HEADERDATA, header_data);
               
         /* Now specify the POST/DELETE/PUT/PATCH data */
         if (method != GET) { 
@@ -159,7 +156,6 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
         
         curl_easy_setopt(curl, CURLOPT_URL, new_endpoint);
 
-        
         /* Perform the request, res will get the return code */
         CURLcode res;
         if((res = curl_easy_perform(curl)) != CURLE_OK) {
@@ -167,22 +163,24 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
             curl_easy_cleanup(curl);
             curl_global_cleanup();
             data_clean(storage);
-            data_clean(header_data);
             return NULL;
         }
 
-        resp_data->data = process_response_data(storage);
-        resp_data->header = process_response_data(header_data);
+        response->data = process_response_data(storage);
+        response->response_code == 0;
+
+        // get response code and content type
+        curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &response->response_code);
+        curl_easy_getinfo (curl, CURLINFO_CONTENT_TYPE, &response->content_type);
 
         /* Check for errors */
         /* always cleanup */
         curl_easy_cleanup(curl);
         data_clean(storage);
-        data_clean(header_data);
         str_destroy(&new_endpoint);
     } 
     curl_global_cleanup();
-    return resp_data;
+    return response;
 }
 
 OAuth* oauth_create() {
@@ -343,7 +341,8 @@ void* oauth_process_request(void* data) {
         request_data* rq_data = unordered_map_first(oauth->request_queue);
         unordered_map_remove(oauth->request_queue, rq_data->id);
         response_data* response = request(rq_data->method, rq_data->endpoint, rq_data->header, rq_data->data);
-        unordered_map_put(oauth->cache, rq_data->id, response);
+        if (response->response_code == 200) // also have to delete old response value
+            unordered_map_put(oauth->cache, rq_data->id, response);
         timex_sleep(strtol(map_get(oauth->params, "request_timeout"), NULL, 10));
         mutex_unlock(&oauth->request_mutex);
     }
@@ -381,7 +380,8 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
             str_append_fmt(&str, "Authorization: %s %s", map_get(oauth->params, "token_type"), map_get(oauth->params, "access_token"));
             rq_data->header = curl_slist_append(rq_data->header, str);
         } response = request(method, endpoint, rq_data->header, rq_data->data);
-        if (cache) unordered_map_put(oauth->cache, rq_data->id, response);
+        if (cache && response->response_code == 200)
+            unordered_map_put(oauth->cache, rq_data->id, response);
         mutex_unlock(&oauth->request_mutex);
     }
     
