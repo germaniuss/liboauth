@@ -341,7 +341,7 @@ void* oauth_process_request(void* data) {
         request_data* rq_data = unordered_map_first(oauth->request_queue);
         unordered_map_remove(oauth->request_queue, rq_data->id);
         response_data* response = request(rq_data->method, rq_data->endpoint, rq_data->header, rq_data->data);
-        if (response->response_code == 200) // also have to delete old response value
+        if (response && response->response_code == 200) // also have to delete old response value
             unordered_map_put(oauth->cache, rq_data->id, response);
         timex_sleep(strtol(map_get(oauth->params, "request_timeout"), NULL, 10));
         mutex_unlock(&oauth->request_mutex);
@@ -380,7 +380,7 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
             str_append_fmt(&str, "Authorization: %s %s", map_get(oauth->params, "token_type"), map_get(oauth->params, "access_token"));
             rq_data->header = curl_slist_append(rq_data->header, str);
         } response = request(method, endpoint, rq_data->header, rq_data->data);
-        if (cache && response->response_code == 200)
+        if (response && cache && response->response_code == 200)
             unordered_map_put(oauth->cache, rq_data->id, response);
         mutex_unlock(&oauth->request_mutex);
     }
