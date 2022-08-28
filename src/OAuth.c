@@ -368,10 +368,10 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     rq_data->endpoint = endpoint;
     rq_data->header = oauth->header_slist;
     rq_data->method = method;
-    str_append_fmt(&rq_data->id, "%s?%s", rq_data->endpoint, rq_data->data);
+    str_append_fmt(&rq_data->id, "/%s %s?%s", REQUEST_STRING[method], endpoint, rq_data->data);
 
     response_data* response;
-    if (cache && (response = unordered_map_get(oauth->cache, rq_data->id))) { 
+    if (cache && (response = unordered_map_get(oauth->cache, rq_data->id))) {
         if (!unordered_map_contains_key(oauth->request_queue, rq_data->id))
             unordered_map_put(oauth->request_queue, rq_data->id, rq_data);
     } else  {

@@ -17,8 +17,8 @@ static const char *REQUEST_STRING[] = {
 };
 
 typedef struct response_data {
-    char* data;
-    char* header;
+    const char* data;
+    const char* header;
     int error_code;
 } response_data;
 
