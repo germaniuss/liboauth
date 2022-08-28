@@ -6,24 +6,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define OAUTH_VERSION "1.0.0"
-
-#define FOREACH_REQUEST(RQ) \
-        RQ(POST)       \
-        RQ(PUT)        \
-        RQ(GET)        \
-        RQ(PATCH)      \
-        RQ(DEL)        \
-
-#define GENERATE_ENUM(ENUM) ENUM,
-#define GENERATE_STRING(STRING) #STRING,
+#define OAUTH_VERSION "1.1.0"
 
 typedef enum REQUEST {
-    FOREACH_REQUEST(GENERATE_ENUM)
+    POST, PUT, GET, PATCH, DEL
 } REQUEST;
 
 static const char *REQUEST_STRING[] = {
-    FOREACH_REQUEST(GENERATE_STRING)
+    "POST", "PUT", "GET", "PATCH", "DELETE"
 };
 
 typedef struct response_data {
