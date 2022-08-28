@@ -7,8 +7,8 @@ void* timeit(void* data) {
         while (timer->stopped && timer->init);
         if (!timer->init) break;
         timex_sleep(timer->ms);
-        timer->stopped = false;
         timer->callback(timer->data);
+        timer->stopped = true;
     }
 }
 

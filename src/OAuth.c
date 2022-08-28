@@ -209,6 +209,22 @@ void oauth_delete(OAuth* oauth) {
     if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
 }
 
+void* oauth_parse_auth(OAuth* oauth, response_data* response) {
+    enum { MAX_FIELDS = 512 };
+    json_t pool[ MAX_FIELDS ];
+    const json_t* json = json_create(response->data, pool, MAX_FIELDS);
+    oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
+    oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
+    oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
+    oauth->authed = true;
+
+    if (*(char*) map_get(oauth->params, "save_on_refresh") == 't')
+        oauth_save(oauth);
+
+    if (*(char*) map_get(oauth->params, "refresh_on_auth") == 't')
+        oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
+}
+
 void* oauth_refresh_task(void* in) {
     OAuth* oauth = (OAuth*) in;
 
@@ -222,20 +238,7 @@ void* oauth_refresh_task(void* in) {
         oauth_append_data(oauth, "client_secret", map_get(oauth->params, "client_secret"));
 
     response_data* response = oauth_request(oauth, POST, map_get(oauth->params, "base_token_url"), false, false);
-
-    enum { MAX_FIELDS = 512 };
-    json_t pool[ MAX_FIELDS ];
-    const json_t* json = json_create(response->data, pool, MAX_FIELDS);
-    oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
-    oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
-    oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
-    oauth->authed = true;
-
-    if (*(char*) map_get(oauth->params, "save_on_refresh") == 't')
-        oauth_save(oauth);
-
-    if (*(char*) map_get(oauth->params, "refresh_on_refresh") == 't')
-        oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
+    oauth_parse_auth(oauth, response);
 }
 
 bool oauth_start_refresh(OAuth* oauth, uint64_t ms) {
@@ -314,15 +317,7 @@ response_data* oauth_post_token(OAuth* oauth, const char* code) {
 
 void oauth_auth(OAuth* oauth, const char* code) {
     response_data* response = oauth_post_token(oauth, code);
-    
-    json_t buf[20];
-    const json_t* obj = json_create(response->data, buf, 20);
-    oauth_set_param(oauth, "access_token", json_value(obj, "access_token").string);
-    oauth_set_param(oauth, "refresh_token", json_value(obj, "refresh_token").string);
-    oauth_set_param(oauth, "token_type", json_value(obj, "token_type").string);
-
-    if (*(char*) map_get(oauth->params, "refresh_on_auth") == 't')
-        oauth_start_refresh(oauth, (json_value(obj, "expires_in").integer * 2000)/3);
+    oauth_parse_auth(oauth, response);
 }
 
 void oauth_set_param(OAuth* oauth, const char* key, char* value) {
@@ -381,18 +376,14 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
             unordered_map_put(oauth->request_queue, rq_data->id, rq_data);
     } else  {
         mutex_lock(&oauth->request_mutex);
-
         if (oauth->authed && auth) {
             const char* str = NULL;
             str_append_fmt(&str, "Authorization: %s %s", map_get(oauth->params, "token_type"), map_get(oauth->params, "access_token"));
             rq_data->header = curl_slist_append(rq_data->header, str);
-        }
-
-        response = request(method, endpoint, rq_data->header, rq_data->data);
-
+        } response = request(method, endpoint, rq_data->header, rq_data->data);
         if (cache) unordered_map_put(oauth->cache, rq_data->id, response);
         mutex_unlock(&oauth->request_mutex);
-    } 
+    }
     
     map_free(oauth->data);
     oauth->data = NULL;
@@ -401,11 +392,11 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
 
 int oauth_process_ini(void *arg, int line, const char *section, const char *key, const char *value) {
     OAuth* oauth = (OAuth*) arg;
-    if (strcmp(section, "Params") == 0) {
+    if (strcmp(section, "Params") == 0)
         oauth_set_param(oauth, str_create(key), str_create(value));
-    } else if (strcmp(section, "Header") == 0) {
+    else if (strcmp(section, "Header") == 0)
         oauth_append_header(oauth, str_create(key), str_create(value));
-    } return 0;
+    return 0;
 }
 
 void oauth_config_dir(OAuth* oauth, const char* dir, const char* name) {
