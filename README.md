@@ -37,6 +37,9 @@ usefull for many others.
 - [ ] <b>IMPORTANT</b> Add cache saving between sessions. Add limit to
 cache size to avoid overloading memory.
 
+- [ ] <b>IMPORTANT</b> Fix response caching memory leaks. Only cache
+response with response code 200.
+
 - [ ] <b>IMPORTANT</b> Decent return type for the response. Currently the 
 bare header and response are returned. The response code
 and any errors should be handled.
