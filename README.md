@@ -24,6 +24,7 @@ registering and handling library however, other awesome options exist.
 - [x] Auto refresh "access token" with zero overhead for the user.
 - [x] Cross-compatibility with Windows/Apple/Linux
 - [x] The response code and content type (as well as the response data) are returned.
+- [x] Custom cache data structure.
 
 ### Missing functionality
 
@@ -35,8 +36,7 @@ module with the same client_id. This may not work on some
 APIs since they might limit incoming trafic but will be
 usefull for many others.
 
-- [ ] <b>IMPORTANT</b> Add cache saving between sessions. Add limit to
-cache size to avoid overloading memory.
+- [ ] <b>IMPORTANT</b> Add cache saving between sessions. 
 
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
