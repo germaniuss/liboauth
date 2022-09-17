@@ -23,6 +23,7 @@ registering and handling library however, other awesome options exist.
 - [x] State saving of "tokens" and other variables (simple .ini file)
 - [x] Auto refresh "access token" with zero overhead for the user.
 - [x] Cross-compatibility with Windows/Apple/Linux
+- [x] The response code and content type (as well as the response data) are returned.
 
 ### Missing functionality
 
@@ -37,13 +38,6 @@ usefull for many others.
 - [ ] <b>IMPORTANT</b> Add cache saving between sessions. Add limit to
 cache size to avoid overloading memory.
 
-- [ ] <b>IMPORTANT</b> Fix response caching memory leaks. Only cache
-response with response code 200.
-
-- [ ] <b>IMPORTANT</b> Decent return type for the response. Currently the 
-bare header and response are returned. The response code
-and any errors should be handled.
-
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
 bugfixing (remove all unnecessary libraries). 
@@ -51,9 +45,12 @@ bugfixing (remove all unnecessary libraries).
 ### Contributing
 
 Any contribution is welcome and should be done through a pull request. Currently
-help is mostly needed with request error handling and documentation.
+help is mostly needed with request error handling and documentation. I also would
+like to rewrite all libraries used as single header files. They would be based on 
+the libraries provided by Ozan Tezcan (see credit). But as single header files so
+they can be putin the include folder in any project.
 
-### Cretit
+### Credit
 
 Credit goes to:<br>
 Rafa Garcia from https://github.com/rafagafe/tiny-json<br>
