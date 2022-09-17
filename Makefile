@@ -4,8 +4,8 @@
 
 # Compiler settings - Can be customized.
 CC = gcc
-CXXFLAGS = -std=c99 -Wall -g -pedantic -lm -I./src
-LDFLAGS = -L. -loauth -lcurl
+CXXFLAGS = -std=c99 -Wall -g -pedantic -lm -I./include -D_XOPEN_SOURCE=700
+LDFLAGS = -L. -lcurl
 LIBNAME = liboauth
 
 # Makefile settings - Can be customized.

@@ -1,36 +1,133 @@
-#include "map.h"
-#include <stdlib.h>
-#include <stdbool.h>
+#ifndef _UTILS_SORTED_MAP_H
+#define _UTILS_SORTED_MAP_H
 
-typedef struct map_entry {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdbool.h>
+#include <stddef.h>
+
+typedef struct sorted_map sorted_map;
+    typedef struct sorted_map_iterator sorted_map_iterator;
+
+    /***************************************************************************
+    * Allocates a new, empty sorted_map with given comparator function.               *
+    ***************************************************************************/ 
+    sorted_map* sorted_map_alloc (int (*comparator)(void*, void*));
+
+    /***************************************************************************
+    * If the sorted_map does not contain the key, inserts it in the sorted_map and associates*
+    * the value with it, returning NULL. Otherwise, the value is updated and   *
+    * the old value is returned.                                               *  
+    ***************************************************************************/ 
+    void* sorted_map_put (sorted_map* my_sorted_map, void* key, void* value);
+
+    /***************************************************************************
+    * Returns true if the key is sorted_mapped in the sorted_map.                            *
+    ***************************************************************************/
+    bool sorted_map_contains_key (sorted_map* my_sorted_map, void* key);
+
+    /***************************************************************************
+    * Returns the value associated with the key, or NULL if the key is not     *
+    * sorted_mapped in the sorted_map.                                                       *
+    ***************************************************************************/
+    void* sorted_map_get (sorted_map* my_sorted_map, void* key);
+
+    /***************************************************************************
+    * If the key is sorted_mapped in the sorted_map, removes the sorted_mapping and returns the value*
+    * of that sorted_mapping. If the sorted_map did not contain the sorted_mapping, returns NULL.   *
+    ***************************************************************************/ 
+    void* sorted_map_remove (sorted_map* my_sorted_map, void* key);
+
+    /***************************************************************************
+    * Removes all the contents of the sorted_map. Deallocates the sorted_map structures. The *
+    * client user is responsible for deallocating the actual contents.         *  
+    ***************************************************************************/ 
+    void sorted_map_clear (sorted_map* my_sorted_map);
+
+    /***************************************************************************
+    * Returns the size of the sorted_map, or namely, the amount of key/value sorted_mappings *
+    * in the sorted_map.                                                              *
+    ***************************************************************************/ 
+    size_t sorted_map_size (sorted_map* my_sorted_map);
+
+    /***************************************************************************
+    * Checks that the sorted_map maintains the AVL-tree property.                     *
+    ***************************************************************************/  
+    bool sorted_map_is_healthy (sorted_map* my_sorted_map);
+
+    /***************************************************************************
+    * Deallocates the entire sorted_map. Only the sorted_map and its nodes are deallocated.  *
+    * The user is responsible for deallocating the actual data stored in the   * 
+    * sorted_map.                                                                     *
+    ***************************************************************************/ 
+    void sorted_map_free (sorted_map* my_sorted_map);
+
+    /***************************************************************************
+    * Returns the iterator over the sorted_map. The entries are iterated in order.    *
+    ***************************************************************************/  
+    sorted_map_iterator* sorted_map_iterator_alloc (sorted_map* my_sorted_map);
+
+    /***************************************************************************
+    * Returns the number of keys not yet iterated over.                        *
+    ***************************************************************************/ 
+    size_t sorted_map_iterator_has_next (sorted_map_iterator* iterator);
+
+    /***************************************************************************
+    * Loads the next sorted_mapping in the iteration order.                           *
+    ***************************************************************************/  
+    bool sorted_map_iterator_next (sorted_map_iterator* iterator, 
+                            void** key_pointer, 
+                            void** value_pointer);
+
+    /***************************************************************************
+    * Returns a true if the sorted_map was modified during the iteration.             *
+    ***************************************************************************/  
+    bool sorted_map_iterator_is_disturbed (sorted_map_iterator* iterator);
+
+    /***************************************************************************
+    * Deallocates the sorted_map iterator.                                            *
+    ***************************************************************************/  
+    void sorted_map_iterator_free (sorted_map_iterator* iterator);
+
+#ifdef __cplusplus
+}
+#endif
+
+#if defined(_UTILS_IMPL) || defined(_UTILS_SORTED_MAP_IMPL)
+
+#include <stdlib.h>
+
+typedef struct sorted_map_entry {
     void*             key;
     void*             value;
-    struct map_entry* left;
-    struct map_entry* right;
-    struct map_entry* parent;
+    struct sorted_map_entry* left;
+    struct sorted_map_entry* right;
+    struct sorted_map_entry* parent;
     int               height;
-} map_entry;
+} sorted_map_entry;
 
-struct map {
-    map_entry* root;
+struct sorted_map {
+    sorted_map_entry* root;
     int      (*comparator)(void*, void*);
     size_t     size;
     size_t     mod_count;
 };
 
-struct map_iterator {
-    map*       owner_map;
-    map_entry* next;
+struct sorted_map_iterator {
+    sorted_map*       owner_sorted_map;
+    sorted_map_entry* next;
     size_t     iterated_count;
     size_t     expected_mod_count;
 };
     
 /*******************************************************************************
-* Creates a new map entry and initializes its fields.                          *
+* Creates a new sorted_map entry and initializes its fields.                          *
 *******************************************************************************/  
-static map_entry* map_entry_t_alloc(void* key, void* value) 
+static sorted_map_entry* sorted_map_entry_t_alloc(void* key, void* value) 
 {
-    map_entry* entry = malloc(sizeof(*entry));
+    sorted_map_entry* entry = malloc(sizeof(*entry));
 
     if (!entry) 
     {
@@ -51,7 +148,7 @@ static map_entry* map_entry_t_alloc(void* key, void* value)
 * Returns the height of an entry. The height of a non-existent entry is        *
 * assumed to be -1.                                                            *
 *******************************************************************************/
-static int height(map_entry* node) 
+static int height(sorted_map_entry* node) 
 {
     return node ? node->height : -1;
 }
@@ -67,9 +164,9 @@ static int max(int a, int b)
 /*******************************************************************************
 * Performs a left rotation and returns the new root of a (sub)tree.            *
 *******************************************************************************/
-static map_entry* left_rotate(map_entry* node_1)
+static sorted_map_entry* left_rotate(sorted_map_entry* node_1)
 {
-    map_entry* node_2 = node_1->right;
+    sorted_map_entry* node_2 = node_1->right;
     
     node_2->parent    = node_1->parent;
     node_1->parent    = node_2;
@@ -90,9 +187,9 @@ static map_entry* left_rotate(map_entry* node_1)
 /*******************************************************************************
 * Performs a right rotation and returns the new root of a (sub)tree.           *
 *******************************************************************************/
-static map_entry* right_rotate(map_entry* node_1)
+static sorted_map_entry* right_rotate(sorted_map_entry* node_1)
 {
-    map_entry* node_2 = node_1->left;
+    sorted_map_entry* node_2 = node_1->left;
     
     node_2->parent   = node_1->parent;
     node_1->parent   = node_2;
@@ -114,9 +211,9 @@ static map_entry* right_rotate(map_entry* node_1)
 * Performs a right rotation following by a left rotation and returns the root  *
 * of the new (sub)tree.                                                        * 
 *******************************************************************************/
-static map_entry* right_left_rotate(map_entry* node_1) 
+static sorted_map_entry* right_left_rotate(sorted_map_entry* node_1) 
 {
-    map_entry* node_2 = node_1->right;
+    sorted_map_entry* node_2 = node_1->right;
     
     node_1->right = right_rotate(node_2);
     
@@ -127,9 +224,9 @@ static map_entry* right_left_rotate(map_entry* node_1)
 * Performs a left rotation following by a right rotation and returns the root  *
 * of the new (sub)tree.                                                        * 
 *******************************************************************************/
-static map_entry* left_right_rotate(map_entry* node_1)
+static sorted_map_entry* left_right_rotate(sorted_map_entry* node_1)
 {
-    map_entry* node_2 = node_1->left;
+    sorted_map_entry* node_2 = node_1->left;
     
     node_1->left = left_rotate(node_2);
     
@@ -144,13 +241,13 @@ static map_entry* left_right_rotate(map_entry* node_1)
 * only one rotation. If 'insertion_mode' is off, the last operation was        *
 * removal and we need to go up until the root node.                            *
 *******************************************************************************/  
-static void fix_after_modification(map* p_map, 
-                                   map_entry* entry,
+static void fix_after_modification(sorted_map* p_sorted_map, 
+                                   sorted_map_entry* entry,
                                    bool insertion_mode)
 {
-    map_entry* parent = entry->parent;
-    map_entry* grand_parent;
-    map_entry* sub_tree;
+    sorted_map_entry* parent = entry->parent;
+    sorted_map_entry* grand_parent;
+    sorted_map_entry* sub_tree;
 
     while (parent) 
     {
@@ -169,7 +266,7 @@ static void fix_after_modification(map* p_map,
                 
             if (!grand_parent) 
             {
-                p_map->root = sub_tree;
+                p_sorted_map->root = sub_tree;
             }
             else if (grand_parent->left == parent) 
             {
@@ -208,7 +305,7 @@ static void fix_after_modification(map* p_map,
                 
             if (!grand_parent)
             {
-                p_map->root = sub_tree;
+                p_sorted_map->root = sub_tree;
             }
             else if (grand_parent->left == parent)
             {
@@ -242,34 +339,34 @@ static void fix_after_modification(map* p_map,
 /*******************************************************************************
 * Performs the actual insertion of an entry.                                   *
 *******************************************************************************/
-static void insert(map* my_map, void* key, void* value) 
+static void insert(sorted_map* my_sorted_map, void* key, void* value) 
 {
-    map_entry* new_entry = map_entry_t_alloc(key, value);
-    map_entry* x;
-    map_entry* parent;
+    sorted_map_entry* new_entry = sorted_map_entry_t_alloc(key, value);
+    sorted_map_entry* x;
+    sorted_map_entry* parent;
 
     if (!new_entry)
     {
         return;
     }
     
-    if (!my_map->root)
+    if (!my_sorted_map->root)
     {
-        my_map->root = new_entry;
-        my_map->size++;
-        my_map->mod_count++;
+        my_sorted_map->root = new_entry;
+        my_sorted_map->size++;
+        my_sorted_map->mod_count++;
         
         return;
     }
 
-    x = my_map->root;
+    x = my_sorted_map->root;
     parent = NULL;
 
     while (x) 
     {
         parent = x;
 
-        if (my_map->comparator(new_entry->key, x->key) < 0)
+        if (my_sorted_map->comparator(new_entry->key, x->key) < 0)
         {
             x = x->left;
         }
@@ -281,7 +378,7 @@ static void insert(map* my_map, void* key, void* value)
 
     new_entry->parent = parent;
 
-    if (my_map->comparator(new_entry->key, parent->key) < 0) 
+    if (my_sorted_map->comparator(new_entry->key, parent->key) < 0) 
     {
         parent->left = new_entry;
     }
@@ -291,15 +388,15 @@ static void insert(map* my_map, void* key, void* value)
     }
 
     /** TRUE means we choose the insertion mode for fixing the tree. */
-    fix_after_modification(my_map, new_entry, true);
-    my_map->size++;
-    my_map->mod_count++;
+    fix_after_modification(my_sorted_map, new_entry, true);
+    my_sorted_map->size++;
+    my_sorted_map->mod_count++;
 }
 
 /*******************************************************************************
 * Returns the minimum entry of a subtree rooted at 'p_entry'.                  *
 *******************************************************************************/  
-static map_entry* min_entry(map_entry* entry)
+static sorted_map_entry* min_entry(sorted_map_entry* entry)
 {
     while (entry->left) 
     {
@@ -313,9 +410,9 @@ static map_entry* min_entry(map_entry* entry)
 * Returns the successor entry as specified by the order implied by the         *
 * comparator.                                                                  *
 *******************************************************************************/
-static map_entry* get_successor_entry(map_entry* entry)
+static sorted_map_entry* get_successor_entry(sorted_map_entry* entry)
 {
-    map_entry* parent;
+    sorted_map_entry* parent;
 
     if (entry->right) 
     {
@@ -336,11 +433,11 @@ static map_entry* get_successor_entry(map_entry* entry)
 /*******************************************************************************
 * This routine is responsible for removing entries from the tree.              *
 *******************************************************************************/  
-static map_entry* delete_entry(map* my_map, map_entry* entry)
+static sorted_map_entry* delete_entry(sorted_map* my_sorted_map, sorted_map_entry* entry)
 {
-    map_entry* parent;
-    map_entry* child;
-    map_entry* successor;
+    sorted_map_entry* parent;
+    sorted_map_entry* child;
+    sorted_map_entry* successor;
 
     void* tmp_key;
     void* tmp_value;
@@ -352,9 +449,9 @@ static map_entry* delete_entry(map* my_map, map_entry* entry)
 
         if (!parent) 
         {
-            my_map->root = NULL;
-            my_map->size--;
-            my_map->mod_count++;
+            my_sorted_map->root = NULL;
+            my_sorted_map->size--;
+            my_sorted_map->mod_count++;
             
             return entry;
         }
@@ -368,8 +465,8 @@ static map_entry* delete_entry(map* my_map, map_entry* entry)
             parent->right = NULL;
         }
 
-        my_map->size--;
-        my_map->mod_count++;
+        my_sorted_map->size--;
+        my_sorted_map->mod_count++;
         
         return entry;
     }
@@ -391,9 +488,9 @@ static map_entry* delete_entry(map* my_map, map_entry* entry)
 
         if (!parent) 
         {
-            my_map->root = child;
-            my_map->size--;
-            my_map->mod_count++;
+            my_sorted_map->root = child;
+            my_sorted_map->size--;
+            my_sorted_map->mod_count++;
             
             return entry;
         }
@@ -407,8 +504,8 @@ static map_entry* delete_entry(map* my_map, map_entry* entry)
             parent->right = child;
         }
 
-        my_map->size--;
-        my_map->mod_count++;
+        my_sorted_map->size--;
+        my_sorted_map->mod_count++;
         
         return entry;
     }
@@ -436,8 +533,8 @@ static map_entry* delete_entry(map* my_map, map_entry* entry)
         child->parent = parent;
     }
         
-    my_map->size--;
-    my_map->mod_count++;
+    my_sorted_map->size--;
+    my_sorted_map->mod_count++;
     successor->key   = tmp_key;
     successor->value = tmp_value;
     
@@ -447,13 +544,13 @@ static map_entry* delete_entry(map* my_map, map_entry* entry)
 /*******************************************************************************
 * Searches for an entry with key 'key'. Returns NULL if there is no such.      *
 *******************************************************************************/  
-static map_entry* find_entry(map* my_map, void* key)
+static sorted_map_entry* find_entry(sorted_map* my_sorted_map, void* key)
 {
-    map_entry* p_entry = my_map->root;
+    sorted_map_entry* p_entry = my_sorted_map->root;
 
-    while (p_entry && my_map->comparator(key, p_entry->key) != 0)
+    while (p_entry && my_sorted_map->comparator(key, p_entry->key) != 0)
     {
-        if (my_map->comparator(key, p_entry->key) < 0)
+        if (my_sorted_map->comparator(key, p_entry->key) < 0)
         {
             p_entry = p_entry->left;
         }
@@ -466,41 +563,41 @@ static map_entry* find_entry(map* my_map, void* key)
     return p_entry;
 }
 
-map* map_alloc(int (*comparator)(void*, void*)) 
+sorted_map* sorted_map_alloc(int (*comparator)(void*, void*)) 
 {
-    map* my_map;
+    sorted_map* my_sorted_map;
 
     if (!comparator) 
     {
         return NULL;
     }
     
-    my_map = malloc(sizeof(*my_map));
+    my_sorted_map = malloc(sizeof(*my_sorted_map));
 
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return NULL;
     }
     
-    my_map->root = NULL;
-    my_map->comparator = comparator;
-    my_map->size = 0;
-    my_map->mod_count = 0;
+    my_sorted_map->root = NULL;
+    my_sorted_map->comparator = comparator;
+    my_sorted_map->size = 0;
+    my_sorted_map->mod_count = 0;
 
-    return my_map;
+    return my_sorted_map;
 }
 
-void* map_put(map* my_map, void* key, void* value)
+void* sorted_map_put(sorted_map* my_sorted_map, void* key, void* value)
 {
-    map_entry* target;
+    sorted_map_entry* target;
     void* old_value;
 
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return NULL;
     }
     
-    target = find_entry(my_map, key);
+    target = find_entry(my_sorted_map, key);
 
     if (target)
     {
@@ -509,45 +606,45 @@ void* map_put(map* my_map, void* key, void* value)
         return old_value; 
     } 
 
-    insert(my_map, key, value);
+    insert(my_sorted_map, key, value);
     return NULL;
 }
 
-bool map_contains_key (map* my_map, void* key)
+bool sorted_map_contains_key (sorted_map* my_sorted_map, void* key)
 {
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return false;
     }
 
-    return find_entry(my_map, key);
+    return find_entry(my_sorted_map, key);
 }
 
-void* map_get(map* my_map, void* key)
+void* sorted_map_get(sorted_map* my_sorted_map, void* key)
 {
-    map_entry* entry;
+    sorted_map_entry* entry;
 
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return NULL;
     }
     
-    entry = find_entry(my_map, key);
+    entry = find_entry(my_sorted_map, key);
     
     return entry ? entry->value : NULL;
 }
 
-void* map_remove(map* my_map, void* key)
+void* sorted_map_remove(sorted_map* my_sorted_map, void* key)
 {
     void* value;
-    map_entry* entry;
+    sorted_map_entry* entry;
 
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return NULL;
     }
     
-    entry = find_entry(my_map, key);
+    entry = find_entry(my_sorted_map, key);
 
     if (!entry) 
     {
@@ -555,8 +652,8 @@ void* map_remove(map* my_map, void* key)
     }
     
     value = entry->value;
-    entry = delete_entry(my_map, entry);
-    fix_after_modification(my_map, entry, false);
+    entry = delete_entry(my_sorted_map, entry);
+    fix_after_modification(my_sorted_map, entry, false);
     free(entry);
     
     return value;
@@ -565,7 +662,7 @@ void* map_remove(map* my_map, void* key)
 /*******************************************************************************
 * This routine implements the actual checking of tree balance.                 *
 *******************************************************************************/  
-static bool check_balance_factors_impl(map_entry* entry)
+static bool check_balance_factors_impl(sorted_map_entry* entry)
 {
     if (!entry) 
     {
@@ -591,11 +688,11 @@ static bool check_balance_factors_impl(map_entry* entry)
 }
 
 /*******************************************************************************
-* Checks that every node in the map is balanced.                               *
+* Checks that every node in the sorted_map is balanced.                               *
 *******************************************************************************/  
-static int check_balance_factors(map* my_map) 
+static int check_balance_factors(sorted_map* my_sorted_map) 
 {
-    return check_balance_factors_impl(my_map->root);
+    return check_balance_factors_impl(my_sorted_map->root);
 }
 
 /*******************************************************************************
@@ -603,7 +700,7 @@ static int check_balance_factors(map* my_map)
 * sentinel value of -2 for denoting the fact that a current subtree contains   *
 * at least one unbalanced node.                                                *  
 *******************************************************************************/  
-static int check_heights_impl(map_entry* entry)
+static int check_heights_impl(sorted_map_entry* entry)
 {
     int height_left;
     int height_right;
@@ -641,109 +738,109 @@ static int check_heights_impl(map_entry* entry)
 }
 
 /*******************************************************************************
-* This routine checks that the height field of each map entry (node) is        *
+* This routine checks that the height field of each sorted_map entry (node) is        *
 * correct.                                                                     *
 *******************************************************************************/  
-static int check_heights(map* my_map)
+static int check_heights(sorted_map* my_sorted_map)
 {
-    return check_heights_impl(my_map->root) != -2;
+    return check_heights_impl(my_sorted_map->root) != -2;
 }
 
-bool map_is_healthy(map* my_map) 
+bool sorted_map_is_healthy(sorted_map* my_sorted_map) 
 {
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return false;
     }
     
-    if (!check_heights(my_map)) 
+    if (!check_heights(my_sorted_map)) 
     {
         return false;
     }
     
-    return check_balance_factors(my_map);
+    return check_balance_factors(my_sorted_map);
 }
 
 /*******************************************************************************
 * Implements the actual deallocation of the tree entries by traversing the     *
 * tree in post-order.                                                          * 
 *******************************************************************************/  
-static void map_free_impl(map_entry* entry)
+static void sorted_map_free_impl(sorted_map_entry* entry)
 {
     if (!entry)
     {
         return;
     }
     
-    map_free_impl(entry->left);
-    map_free_impl(entry->right);
+    sorted_map_free_impl(entry->left);
+    sorted_map_free_impl(entry->right);
     free(entry);
 }
 
-void map_free(map* my_map) 
+void sorted_map_free(sorted_map* my_sorted_map) 
 {
-    if (!my_map || !my_map->root)      
+    if (!my_sorted_map || !my_sorted_map->root)      
     {
         return;
     }
     
-    map_free_impl(my_map->root);
-    free(my_map);
+    sorted_map_free_impl(my_sorted_map->root);
+    free(my_sorted_map);
 }
 
-void map_clear(map* my_map) 
+void sorted_map_clear(sorted_map* my_sorted_map) 
 {
-    if (!my_map || !my_map->root) 
+    if (!my_sorted_map || !my_sorted_map->root) 
     {
         return;
     }
     
-    map_free_impl(my_map->root);
-    my_map->mod_count += my_map->size;
-    my_map->root = NULL;
-    my_map->size = 0;
+    sorted_map_free_impl(my_sorted_map->root);
+    my_sorted_map->mod_count += my_sorted_map->size;
+    my_sorted_map->root = NULL;
+    my_sorted_map->size = 0;
 }
 
-size_t map_size(map* my_map) 
+size_t sorted_map_size(sorted_map* my_sorted_map) 
 {
-    return my_map ? my_map->size : 0;
+    return my_sorted_map ? my_sorted_map->size : 0;
 }
 
-map_iterator* map_iterator_alloc(map* my_map)
+sorted_map_iterator* sorted_map_iterator_alloc(sorted_map* my_sorted_map)
 {
-    map_iterator* iterator;
+    sorted_map_iterator* iterator;
     
-    if (!my_map) 
+    if (!my_sorted_map) 
     {
         return NULL;
     }
     
     iterator = malloc(sizeof(*iterator));
-    iterator->expected_mod_count = my_map->mod_count;
+    iterator->expected_mod_count = my_sorted_map->mod_count;
     iterator->iterated_count = 0;
-    iterator->owner_map = my_map;
-    iterator->next = my_map->root ? min_entry(my_map->root) : NULL;
+    iterator->owner_sorted_map = my_sorted_map;
+    iterator->next = my_sorted_map->root ? min_entry(my_sorted_map->root) : NULL;
     
     return iterator;
 }
 
-size_t map_iterator_has_next(map_iterator* iterator) 
+size_t sorted_map_iterator_has_next(sorted_map_iterator* iterator) 
 {
     if (!iterator)
     {
         return 0;
     }
     
-    /** If the map was modified, stop iteration. */
-    if (map_iterator_is_disturbed(iterator)) 
+    /** If the sorted_map was modified, stop iteration. */
+    if (sorted_map_iterator_is_disturbed(iterator)) 
     {
         return 0;
     }
     
-    return iterator->owner_map->size - iterator->iterated_count;
+    return iterator->owner_sorted_map->size - iterator->iterated_count;
 }
 
-bool map_iterator_next(map_iterator* iterator, 
+bool sorted_map_iterator_next(sorted_map_iterator* iterator, 
                          void** key_pointer, 
                          void** value_pointer)
 {
@@ -757,7 +854,7 @@ bool map_iterator_next(map_iterator* iterator,
         return false;
     }
     
-    if (map_iterator_is_disturbed(iterator))
+    if (sorted_map_iterator_is_disturbed(iterator))
     {
         return false;
     }
@@ -770,24 +867,27 @@ bool map_iterator_next(map_iterator* iterator,
     return true;
 }
 
-bool map_iterator_is_disturbed(map_iterator* iterator) 
+bool sorted_map_iterator_is_disturbed(sorted_map_iterator* iterator) 
 {
     if (!iterator) 
     {
         return false;
     }
     
-    return iterator->expected_mod_count != iterator->owner_map->mod_count;
+    return iterator->expected_mod_count != iterator->owner_sorted_map->mod_count;
 }
 
-void map_iterator_free(map_iterator* iterator) 
+void sorted_map_iterator_free(sorted_map_iterator* iterator) 
 {
     if (!iterator) 
     {
         return;
     }
     
-    iterator->owner_map = NULL;
+    iterator->owner_sorted_map = NULL;
     iterator->next = NULL;
     free(iterator);
 }
+
+#endif
+#endif
