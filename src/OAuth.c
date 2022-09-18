@@ -198,11 +198,11 @@ OAuth* oauth_create() {
     oauth->authed = false;
     oauth->request_run = false;
     ini_init(&oauth->params);
-    linked_map_init(&oauth->request_queue, 200, 0, 0.0, true, true, &linked_map_config_str);
+    linked_map_init(&oauth->request_queue, 200, 0, 0.0, false, false, &linked_map_config_str);
     linked_map_init(&oauth->cache, 200, 0, 0.0, true, true, &linked_map_config_str);
     mutex_init(&oauth->request_mutex);
     oauth->data = NULL;
-    oauth->header_slist = NULL;    
+    oauth->header_slist = NULL;
     return oauth;
 }
 
