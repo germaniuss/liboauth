@@ -84,6 +84,10 @@ bool linked_map_assign(linked_map_entry **t, void *key, void *value)
 
 	(*t)->key = key;
 	(*t)->value = value;
+	(*t)->prev = 0;
+	(*t)->next = 0;
+	(*t)->chain_next = 0;
+	(*t)->chain_prev = 0;
 }
 
 bool linked_map_remap(linked_map *m)

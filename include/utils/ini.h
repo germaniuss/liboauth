@@ -124,6 +124,7 @@ int ini_load(ini* i, const char* filename) {
 		map_term_sv(&i->params[index]);
 	} i->size = 0;
 	ini_parse_file(i, ini_default_parse_fn, filename);
+	return 1;
 }
 
 int ini_save(ini* i, const char* filename) {

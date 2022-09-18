@@ -42,6 +42,7 @@ void oauth_stop_request_thread(OAuth* oauth);
 response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, bool auth);
 
 void oauth_config_dir(OAuth* oauth, const char* dir, const char* name);
+void oauth_cache_dir(OAuth* oauth, const char* dir, const char* name);
 bool oauth_load(OAuth* oauth);
 bool oauth_save(OAuth* oauth);
 
