@@ -34,7 +34,8 @@ application/json (AKA XML)
 Any contribution is welcome and should be done through a pull request. Currently
 help is mostly needed with documentation and general bugfixing. Also standarization
 and cleanup of [libutils](https://github.com/germaniuss/libschemehandler) would be
-nice.
+nice. Any comments on how to make the project faster and/or cleaner are also very
+welcome.
 
 ### Credit
 
