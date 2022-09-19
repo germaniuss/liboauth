@@ -19,7 +19,7 @@ registering and handling library however, other awesome options exist.
 - [x] Syncronous API requests with request caching.
 - [x] Compatibility with my URI scheme handler.
 - [x] Supports all major API request types (PUT, PATCH, POST, GET, DELETE...)
-- [x] State saving of "tokens" and other variables (simple .ini file)
+- [x] State saving of "tokens" and configuration variables (simple .ini file)
 - [x] Auto refresh "access token" with zero overhead for the user.
 - [x] Cross-compatibility with Windows/Apple/Linux
 - [x] The response code and content type (as well as the response data) are returned.
