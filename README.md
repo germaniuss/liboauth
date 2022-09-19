@@ -25,16 +25,13 @@ registering and handling library however, other awesome options exist.
 - [x] Cross-compatibility with Windows/Apple/Linux
 - [x] The response code and content type (as well as the response data) are returned.
 - [x] Custom cache data structure with cache saving between sessions.
+- [x] Async request support for the same oauth module with the same client_id.
+- [x] Optional per request configurations (cached, async and authed)
 
 ### Missing functionality
 
 - [ ] Handling on auth callback different than
 application/json (AKA XML)
-
-- [ ] Add async request support for the same oauth
-module with the same client_id. This may not work on some
-APIs since they might limit incoming trafic but will be
-usefull for many others.
 
 - [ ] Simplification of the codebase for tighter
 integration of the libraries used as well as general
@@ -55,3 +52,4 @@ Rafa Garcia from https://github.com/rafagafe/tiny-json<br>
 Ozan Tezcan from https://github.com/tezc/sc<br>
 Rodion Efremov from https://github.com/coderodde/coderodde.c.utils<br>
 for their amazing libraries.
+
