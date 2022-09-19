@@ -4,8 +4,7 @@
 This library is insipred by https://github.com/slugonamission/OAuth2
 but aims to add extra missing functionality like access token refresh, 
 state saving, response caching, etc.
-The project is now working but do expect bugs
-and breaking API changes while the project matures.
+The project is working and API changes are not extpected though this is not a guarantee.
 
 Note that for the full functionality it is expected you use some other library
 to extract the code from the redirect uri. It is recommended to use my scheme
