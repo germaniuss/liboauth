@@ -32,10 +32,6 @@ registering and handling library however, other awesome options exist.
 - [ ] Handling on auth callback different than
 application/json (AKA XML)
 
-- [ ] Simplification of the codebase for tighter
-integration of the libraries used as well as general
-bugfixing (remove all unnecessary libraries). 
-
 ### Contributing
 
 Any contribution is welcome and should be done through a pull request. Currently
