@@ -10,7 +10,7 @@ Note that for the full functionality it is expected you use some other library
 to extract the code from the redirect uri. It is recommended to use my scheme
 registering and handling library however, other awesome options exist.
 
-[libschemehandler](https://github.com/germaniuss/libschemehandler): Lightweight scheme registering and handling library with no extra dependencies (<b>LICENSE MIT</b>)<br?
+[libschemehandler](https://github.com/germaniuss/libschemehandler): Lightweight scheme registering and handling library with no extra dependencies (<b>LICENSE MIT</b>)<br>
 [Ultralight](https://ultralig.ht/): Lightweight and powerfull embeded browser library (formerly awesomium) (<b>TRIPLE LICENSE</b>)<br>
 [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/): Lightweight and simple HTTP server library written in ansi C and perfect for embedded systems (<b>LICENSE GPL-3</b>)<br>
 
