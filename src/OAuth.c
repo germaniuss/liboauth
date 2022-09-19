@@ -15,7 +15,7 @@
 #include "OAuth.h"
 
 #define MAX_BUFFER 2048 //4KB Buffers
-#define BIT(NUM, N) (NUM) & (N)
+#define BIT(NUM, N) ((NUM) & (N))
 
 typedef struct OAuth {
     bool authed;
@@ -123,8 +123,8 @@ size_t process_response(void *ptr, size_t size, size_t nmemb, void *userdata) {
 
 response_data* copy_response(response_data* response) {
     response_data* response_copy = (response_data*) malloc(sizeof(response_data));
-    response_copy->data = response->data;
-    response_copy->content_type = response->content_type;
+    response_copy->data = strdup(response->data);
+    response_copy->content_type = strdup(response->content_type);
     response_copy->response_code = response->response_code;
     return response_copy;
 }
@@ -180,7 +180,9 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
 
         // get response code and content type
         curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &response->response_code);
-        curl_easy_getinfo (curl, CURLINFO_CONTENT_TYPE, &response->content_type);
+        const char* content;
+        curl_easy_getinfo (curl, CURLINFO_CONTENT_TYPE, &content);
+        response->content_type = strdup(content);
 
         /* Check for errors */
         /* always cleanup */
@@ -393,10 +395,11 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint)
     rq_data->endpoint = endpoint;
     rq_data->header = oauth->header_slist;
     rq_data->method = method;
-    str_append_fmt(&rq_data->id, "/%s/%s?%s", REQUEST_STRING[method], endpoint, rq_data->data);
+    str_append_fmt(&rq_data->id, "/%s/%s", REQUEST_STRING[method], endpoint);
+    if (rq_data->data) str_append_fmt(&rq_data->id, "?%s", rq_data->data);
 
     response_data* response;
-    if (BIT(options, REQUEST_CACHE) && (response = linked_map_get(&oauth->cache, rq_data->id))) {
+    if (BIT(options, REQUEST_CACHE) && !BIT(options, REQUEST_ASYNC) && (response = linked_map_get(&oauth->cache, rq_data->id))) {
         response = copy_response(response);
         if (!linked_map_get(&oauth->request_queue, rq_data->id))
             linked_map_put(&oauth->request_queue, rq_data->id, rq_data);
@@ -405,14 +408,15 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint)
             const char* str = NULL;
             str_append_fmt(&str, "Authorization: %s %s", oauth->args[TOKEN_BEARER], oauth->args[ACCESS_TOKEN]);
             rq_data->header = curl_slist_append(rq_data->header, str);
-        } 
-        mutex_lock(&oauth->request_mutex);
+        }
+
+        if (!BIT(options, REQUEST_ASYNC)) mutex_lock(&oauth->request_mutex);
         response = request(method, endpoint, rq_data->header, rq_data->data);
         if (response && BIT(options, REQUEST_CACHE) && response->response_code == 200) {
             linked_map_put(&oauth->cache, rq_data->id, response);
             response = copy_response(response);
         } 
-        mutex_unlock(&oauth->request_mutex);
+        if (!BIT(options, REQUEST_ASYNC)) mutex_unlock(&oauth->request_mutex);
     }
     
     sorted_map_free(oauth->data);
@@ -458,6 +462,7 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
         for (i = 0; i < 3; i++) {
             if (!strcmp(OPTION_STRING[i], key) && !strcmp(value, "true")) {
                 oauth->default_options |= val;
+                oauth->current_options = oauth->default_options;
                 break;
             } val *= 2;
         } return 0;
@@ -487,10 +492,13 @@ bool oauth_load_cache(OAuth* oauth) {
     }
 
     char* save = NULL;
-    while ((read = getline(&line, &len, fp)) != -1) {
+    while ((read = getline(&line, &len, fp)) != -1 && strcmp(line, "\n")) {
         const char* key = strtok(line, " ");
         const char* val = strtok(NULL, "");
-        linked_map_put(&oauth->cache, key, val);
+        response_data* response = malloc(sizeof(response_data));
+        response->data = strdup(val);
+        response->response_code = 200;
+        linked_map_put(&oauth->cache, strdup(key), response);
     }
 
     fclose(fp);
