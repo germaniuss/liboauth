@@ -1,5 +1,5 @@
 # liboauth
-### Standalone cross-platform C oauth 2.0 authentication ilbrary using curl
+### Standalone cross-platform C oauth 2.0 ilbrary using curl
 
 This library is insipred by https://github.com/slugonamission/OAuth2
 but aims to add extra missing functionality like access token refresh, 
