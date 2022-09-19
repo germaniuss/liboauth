@@ -26,9 +26,6 @@ registering and handling library however, other awesome options exist.
 - [x] Custom cache data structure with cache saving between sessions.
 - [x] Async request support for the same oauth module with the same client_id.
 - [x] Optional per request configurations (cached, async and authed)
-
-### Missing functionality
-
 - [ ] Handling on auth callback different than
 application/json (AKA XML)
 
