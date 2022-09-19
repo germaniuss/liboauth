@@ -8,7 +8,7 @@ int main(void) {
     oauth_load(oauth);
     
     oauth_append_data(oauth, "limit", "4");
-    response_data* response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/season/2017/summer", true, false);
+    response_data* response = oauth_request(oauth, GET, "https://api.myanimelist.net/v2/anime/season/2017/summer");
 
     oauth_save(oauth);
     return 0;

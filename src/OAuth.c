@@ -1,5 +1,5 @@
 #define _UTILS_IMPL
-#include <utils/sha_256.h>
+#include <utils/crypto.h>
 #include <utils/str.h>
 #include <utils/time.h>
 #include <utils/json.h>
@@ -15,22 +15,21 @@
 #include "OAuth.h"
 
 #define MAX_BUFFER 2048 //4KB Buffers
+#define BIT(NUM, N) (NUM) & (N)
 
 typedef struct OAuth {
-    bool request_run;
+    bool authed;
+    char* args[17];
+    struct curl_slist* header_slist;
+    uint8_t default_options;
+    uint8_t current_options;
+    sorted_map* data;
     linked_map cache;
     linked_map request_queue;
+    bool request_run;
     struct thread request_thread;
     struct mutex request_mutex;
     struct timer refresh_timer;
-    struct curl_slist* header_slist;
-    sorted_map* data;
-    ini params;
-    char* code_verifier;
-    char* code_challenge;
-    char* config_file;
-    char* cache_file;
-    bool authed;
 } OAuth;
 
 typedef struct request_data {
@@ -197,7 +196,6 @@ OAuth* oauth_create() {
     OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));
     oauth->authed = false;
     oauth->request_run = false;
-    ini_init(&oauth->params);
     linked_map_init(&oauth->request_queue, 200, 0, 0.0, false, false, &linked_map_config_str);
     linked_map_init(&oauth->cache, 200, 0, 0.0, true, true, &linked_map_config_str);
     mutex_init(&oauth->request_mutex);
@@ -210,9 +208,9 @@ void oauth_delete(OAuth* oauth) {
     linked_map_term(&oauth->request_queue);
     linked_map_term(&oauth->cache);
     mutex_term(&oauth->request_mutex);
-    if (oauth->data) map_free(oauth->data);
-    if (oauth->code_challenge) str_destroy(&oauth->code_challenge);
-    if (oauth->code_verifier) str_destroy(&oauth->code_verifier);
+    if (oauth->data) sorted_map_free(oauth->data);
+    if (oauth->args[CODE_CHALLENGE]) str_destroy(&oauth->args[CODE_CHALLENGE]);
+    if (oauth->args[CODE_VERIFIER]) str_destroy(&oauth->args[CODE_VERIFIER]);
     if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
 }
 
@@ -221,31 +219,32 @@ void* oauth_parse_auth(OAuth* oauth, response_data* response) {
     enum { MAX_FIELDS = 512 };
     json_t pool[ MAX_FIELDS ];
     const json_t* json = json_create(response->data, pool, MAX_FIELDS);
-    oauth_set_param(oauth, "token_type", json_value(json, "token_type").string);
-    oauth_set_param(oauth, "access_token", json_value(json, "access_token").string);
-    oauth_set_param(oauth, "refresh_token", json_value(json, "refresh_token").string);
+    oauth->args[TOKEN_BEARER] = json_value(json, "token_type").string;
+    oauth->args[ACCESS_TOKEN] = json_value(json, "access_token").string;
+    oauth->args[REFRESH_TOKEN] = json_value(json, "refresh_token").string;
     oauth->authed = true;
 
-    if (*ini_get(&oauth->params, "Params", "save_on_refresh") == 't')
+    if (oauth->args[SAVE_ON_OAUTH])
         oauth_save(oauth);
 
-    if (*ini_get(&oauth->params, "Params", "refresh_on_auth") == 't')
+    if (oauth->args[REFRESH_ON_OAUTH])
         oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
 }
 
 void* oauth_refresh_task(void* in) {
     OAuth* oauth = (OAuth*) in;
 
-    if (!ini_get(&oauth->params, "Params", "refresh_token") || !ini_get(&oauth->params, "Params", "client_id") || !ini_get(&oauth->params, "Params", "base_token_url"))
+    if (!oauth->args[REFRESH_TOKEN] || !oauth->args[CLIENT_ID] || !oauth->args[TOKEN_URL])
         return false;
 
-    oauth_append_data(oauth, "client_id", ini_get(&oauth->params, "Params", "client_id"));
-    oauth_append_data(oauth, "refresh_token", ini_get(&oauth->params, "Params", "refresh_token"));
+    oauth_append_data(oauth, "client_id", oauth->args[CLIENT_ID]);
+    oauth_append_data(oauth, "refresh_token", oauth->args[REFRESH_TOKEN]);
     oauth_append_data(oauth, "grant_type", "refresh_token");
-    if (ini_get(&oauth->params, "Params", "client_secret"))
-        oauth_append_data(oauth, "client_secret", ini_get(&oauth->params, "Params", "client_secret"));
+    if (oauth->args[CLIENT_SECRET])
+        oauth_append_data(oauth, "client_secret", oauth->args[CLIENT_SECRET]);
 
-    response_data* response = oauth_request(oauth, POST, ini_get(&oauth->params, "Params", "base_token_url"), false, false);
+    oauth_set_options(oauth, 0);
+    response_data* response = oauth_request(oauth, POST, oauth->args[TOKEN_URL]);
     if (response && response->response_code == 200) {
         oauth_parse_auth(oauth, response);
         free(response);
@@ -253,7 +252,7 @@ void* oauth_refresh_task(void* in) {
 }
 
 bool oauth_start_refresh(OAuth* oauth, uint64_t ms) {
-    if (!ini_get(&oauth->params, "Params", "refresh_token") || !ini_get(&oauth->params, "Params", "client_id") || !ini_get(&oauth->params, "Params", "base_token_url"))
+    if (!oauth->args[REFRESH_TOKEN] || !oauth->args[CLIENT_ID] || !oauth->args[TOKEN_URL])
         return false;
 
     if (ms == 0) {
@@ -272,58 +271,59 @@ bool oauth_stop_refresh(OAuth* oauth) {
 
 bool oauth_gen_challenge(OAuth* oauth) {
     
-    if (!ini_get(&oauth->params, "Params", "code_challenge_method"))
+    if (!oauth->args[CHALLENGE_METHOD])
         return false;
 
-    if (strcmp(ini_get(&oauth->params, "Params", "code_challenge_method"), "plain") == 0) {
-        oauth->code_verifier = str_create_random(128);
-        oauth->code_challenge = str_create(oauth->code_verifier);
+    if (strcmp(oauth->args[CHALLENGE_METHOD], "plain") == 0) {
+        oauth->args[CODE_VERIFIER] = str_create_random(128);
+        oauth->args[CODE_CHALLENGE] = str_create(oauth->args[CODE_VERIFIER]);
         return true;
-    } else if (strcmp(ini_get(&oauth->params, "Params", "code_challenge_method"), "S256") == 0) {
+    } else if (strcmp(oauth->args[CHALLENGE_METHOD], "S256") == 0) {
         uint8_t hash[32];
         char hash_string[65];
-        oauth->code_verifier = str_create_random(32);
-        calc_sha_256(hash, oauth->code_verifier, str_len(oauth->code_verifier));
+        oauth->args[CODE_VERIFIER] = str_create_random(32);
+        calc_sha_256(hash, oauth->args[CODE_VERIFIER], str_len(&oauth->args[CODE_VERIFIER]));
         hash_to_string(hash_string, hash);
-        oauth->code_challenge = str_encode_base64(hash_string);
+        oauth->args[CODE_CHALLENGE] = str_encode_base64(hash_string);
         return true;
     } return false;
 }
 
 char* oauth_auth_url(OAuth* oauth) {
 
-    if (!ini_get(&oauth->params, "Params", "base_auth_url") || !ini_get(&oauth->params, "Params", "client_id"))
+    if (!oauth->args[AUTH_URL] || !oauth->args[CLIENT_ID])
         return NULL;
 
     oauth_gen_challenge(oauth);
 
-    char* authURL = str_create_fmt("%s?client_id=%s\\&response_type=code", ini_get(&oauth->params, "Params", "base_auth_url"), ini_get(&oauth->params, "Params", "client_id"));
+    char* authURL = str_create_fmt("%s?client_id=%s\\&response_type=code", oauth->args[AUTH_URL], oauth->args[CLIENT_ID]);
 
-    if (ini_get(&oauth->params, "Params", "redirect_uri"))
-        str_append_fmt(&authURL, "\\&redirect_uri=", ini_get(&oauth->params, "Params", "redirect_uri"));
-    if (ini_get(&oauth->params, "Params", "code_challenge_method"))
-        str_append_fmt(&authURL, "\\&code_challenge_method=%s\\&code_challenge=%s", ini_get(&oauth->params, "Params", "code_challenge_method"), oauth->code_challenge);
+    if (oauth->args[REDIRECT_URI])
+        str_append_fmt(&authURL, "\\&redirect_uri=", oauth->args[REDIRECT_URI]);
+    if (oauth->args[CHALLENGE_METHOD])
+        str_append_fmt(&authURL, "\\&code_challenge_method=%s\\&code_challenge=%s", oauth->args[CHALLENGE_METHOD], oauth->args[CODE_CHALLENGE]);
 
     return authURL;
 }
 
 response_data* oauth_post_token(OAuth* oauth, const char* code) {
 
-    if (!ini_get(&oauth->params, "Params", "base_token_url") || !ini_get(&oauth->params, "Params", "client_id") || code == NULL)
+    if (!oauth->args[TOKEN_URL] || !oauth->args[CLIENT_ID] || code == NULL)
         return NULL;
 
-    if (ini_get(&oauth->params, "Params", "client_secret")) 
-        oauth_append_data(oauth, "client_secret", ini_get(&oauth->params, "Params", "client_secret"));
-    if (ini_get(&oauth->params, "Params", "redirect_uri")) 
-        oauth_append_data(oauth, "redirect_uri", ini_get(&oauth->params, "Params", "redirect_uri"));
-    if (oauth->code_verifier != 0)
-        oauth_append_data(oauth, "code_verifier", oauth->code_verifier);
+    if (oauth->args[CLIENT_SECRET]) 
+        oauth_append_data(oauth, "client_secret", oauth->args[CLIENT_SECRET]);
+    if (oauth->args[REDIRECT_URI]) 
+        oauth_append_data(oauth, "redirect_uri", oauth->args[REDIRECT_URI]);
+    if (oauth->args[CODE_VERIFIER] != 0)
+        oauth_append_data(oauth, "code_verifier", oauth->args[CODE_VERIFIER]);
 
     oauth_append_data(oauth, "code", code);
-    oauth_append_data(oauth, "client_id", ini_get(&oauth->params, "Params", "client_id"));
+    oauth_append_data(oauth, "client_id", oauth->args[CLIENT_ID]);
     oauth_append_data(oauth, "grant_type", "authorization_code");
 
-    return oauth_request(oauth, POST, ini_get(&oauth->params, "Params", "base_token_url"), false, false);
+    oauth_set_options(oauth, 0);
+    return oauth_request(oauth, POST, oauth->args[TOKEN_URL]);
 }
 
 void oauth_auth(OAuth* oauth, const char* code) {
@@ -334,14 +334,19 @@ void oauth_auth(OAuth* oauth, const char* code) {
     }
 }
 
-void oauth_set_param(OAuth* oauth, const char* key, char* value) {
-    ini_put(&oauth->params, "Params", (void*) key, (void*) value);
+void oauth_set_param(OAuth* oauth, PARAM param, char* value) {
+    oauth->args[param] = value;
+}
+
+bool oauth_set_options(OAuth* oauth, uint8_t options) {
+    if (options > 7) return false;
+    oauth->current_options = options;
+    return true;
 }
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value) {
     char* val = str_create_fmt("%s:%s", key, value);
     oauth->header_slist = curl_slist_append(oauth->header_slist, val);
-    ini_put(&oauth->params, "Header", (void*) key, (void*) value);
 }
 
 void oauth_append_data(OAuth* oauth, const char* key, const char* value) {
@@ -364,7 +369,7 @@ void* oauth_process_request(void* data) {
                 free(old_response);
             linked_map_put(&oauth->cache, rq_data->id, response);
         }  
-        time_sleep(strtol(ini_get(&oauth->params, "Params", "request_timeout"), NULL, 10));
+        time_sleep(strtol(oauth->args[REQUEST_TIMEOUT], NULL, 10));
         mutex_unlock(&oauth->request_mutex);
     }
 }
@@ -380,8 +385,8 @@ void oauth_stop_request_thread(OAuth* oauth) {
     thread_term(&oauth->request_thread);
 }
 
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, bool auth) {
-
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint) {
+    uint8_t options = oauth->current_options;
     request_data* rq_data = (request_data*) malloc(sizeof(request_data));
     rq_data->id = NULL;
     rq_data->data = parse_data(oauth->data, "&");
@@ -391,67 +396,85 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint,
     str_append_fmt(&rq_data->id, "/%s/%s?%s", REQUEST_STRING[method], endpoint, rq_data->data);
 
     response_data* response;
-    if (cache && (response = linked_map_get(&oauth->cache, rq_data->id))) {
+    if (BIT(options, REQUEST_CACHE) && (response = linked_map_get(&oauth->cache, rq_data->id))) {
         response = copy_response(response);
         if (!linked_map_get(&oauth->request_queue, rq_data->id))
             linked_map_put(&oauth->request_queue, rq_data->id, rq_data);
     } else  {
-        mutex_lock(&oauth->request_mutex);
-        if (oauth->authed && auth) {
+        if (oauth->authed && BIT(options, REQUEST_AUTH)) {
             const char* str = NULL;
-            str_append_fmt(&str, "Authorization: %s %s", ini_get(&oauth->params, "Params", "token_type"), ini_get(&oauth->params, "Params", "access_token"));
+            str_append_fmt(&str, "Authorization: %s %s", oauth->args[TOKEN_BEARER], oauth->args[ACCESS_TOKEN]);
             rq_data->header = curl_slist_append(rq_data->header, str);
-        } response = request(method, endpoint, rq_data->header, rq_data->data);
-        if (response && cache && response->response_code == 200) {
+        } 
+        mutex_lock(&oauth->request_mutex);
+        response = request(method, endpoint, rq_data->header, rq_data->data);
+        if (response && BIT(options, REQUEST_CACHE) && response->response_code == 200) {
             linked_map_put(&oauth->cache, rq_data->id, response);
             response = copy_response(response);
         } 
         mutex_unlock(&oauth->request_mutex);
     }
     
-    map_free(oauth->data);
+    sorted_map_free(oauth->data);
+    oauth->current_options = oauth->default_options;
     oauth->data = NULL;
     return response;
 }
 
 void oauth_config_dir(OAuth* oauth, const char* dir, const char* name) {
-    oauth->config_file = getexecdir();
-    oauth->cache_file = getexecdir();
-    path_add(&oauth->config_file, dir);
-    path_add(&oauth->config_file, name);
-    path_add(&oauth->cache_file, dir);
-    path_add(&oauth->cache_file, name);
-    str_append(&oauth->config_file, ".ini");
-    str_append(&oauth->cache_file, ".cache");
+    oauth->args[CONFIG_FILE] = getexecdir();
+    path_add(&oauth->args[CONFIG_FILE], dir);
+    path_add(&oauth->args[CONFIG_FILE], name);
+    str_append(&oauth->args[CONFIG_FILE], ".ini");
 }
 
 void oauth_cache_dir(OAuth* oauth, const char* dir, const char* name) {
-    oauth->cache_file = getexecdir();
-    path_add(&oauth->cache_file, dir);
-    path_add(&oauth->cache_file, name);
-    str_append(&oauth->cache_file, ".cache");
+    oauth->args[CACHE_FILE] = getexecdir();
+    path_add(&oauth->args[CACHE_FILE], dir);
+    path_add(&oauth->args[CACHE_FILE], name);
+    str_append(&oauth->args[CACHE_FILE], ".cache");
+}
+
+int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *key, const char *value) {
+    uint32_t i;
+
+    if (!strcmp("Header", section)) {
+        char* val = str_create_fmt("%s:%s", key, value);
+        oauth->header_slist = curl_slist_append(oauth->header_slist, val);
+        return 0;
+    }
+
+    if (!strcmp("Params", section)) {
+        for (i = 0; i < 15; i++) {
+            if (!strcmp(PARAM_STRING[i], key)) {
+                oauth->args[i] = strdup(value);
+                break;
+            }
+        } return 0;
+    }
+
+    if (!strcmp("Options", section)) {
+        uint8_t val = 1;
+        for (i = 0; i < 3; i++) {
+            if (!strcmp(OPTION_STRING[i], key) && !strcmp(value, "true")) {
+                oauth->default_options |= val;
+                break;
+            } val *= 2;
+        } return 0;
+    }
+
+    return 0;
 }
 
 bool oauth_load_config(OAuth* oauth) {
-    if (oauth->config_file == NULL || !ini_load(&oauth->params, oauth->config_file)) 
+    if (oauth->args[CONFIG_FILE] == NULL)
         return NULL;
 
-    char* key; char* value;
-    uint32_t index = map_get_s64(&oauth->params.sections, "Header");
-    map_foreach(&oauth->params.params[index], key, value) {
-        char* val = str_create_fmt("%s:%s", key, value);
-        oauth->header_slist = curl_slist_append(oauth->header_slist, val);
-    }
-
-    if (ini_get(&oauth->params, "Params", "refresh_on_load")[0] == 't' && 
-        ini_get(&oauth->params, "Params", "refresh_token") != 0)
-        oauth_start_refresh(oauth, 0);
-    
-    return 1;
+    return !ini_parse_file(oauth, oauth_process_ini, oauth->args[CONFIG_FILE]);
 }
 
 bool oauth_load_cache(OAuth* oauth) {
-    if (oauth->cache_file == NULL) 
+    if (oauth->args[CACHE_FILE] == NULL) 
         return NULL;
 
     FILE * fp;
@@ -459,7 +482,7 @@ bool oauth_load_cache(OAuth* oauth) {
     size_t len = 0;
     ssize_t read;
 
-    if (!(fp = fopen(oauth->cache_file, "r"))) {
+    if (!(fp = fopen(oauth->args[CACHE_FILE], "r"))) {
         return NULL;
     }
 
@@ -482,19 +505,37 @@ bool oauth_load(OAuth* oauth) {
 }
 
 bool oauth_save_config(OAuth* oauth) {
+    ini aux;
+    ini_open(&aux, oauth->args[CONFIG_FILE]);
 
-    if (oauth->config_file == NULL) 
-        return NULL;
+    // for every value in params save
+    for (uint32_t i = 0; i < 15; i++) {
+        ini_save(&aux, "Params", PARAM_STRING[i], oauth->args[i]);
+    }
+    
+    // for every value in header save
+    char* key; char* value;
+    struct curl_slist* ptr = oauth->header_slist;
+    while (ptr) {
+        char* save = NULL;
+        char* val = str_create(ptr->data);
+        key = str_create(str_token_begin(val, &save, ":"));
+        value = str_token_begin(val, &save, "");
+        ini_save(&aux, "Header", key, value);
+        str_destroy(&val);
+        str_destroy(&key);
+        ptr = ptr->next;
+    }
 
-    return ini_save(&oauth->params, oauth->config_file);
+    ini_close(&aux);
 }
 
 bool oauth_save_cache(OAuth* oauth) {
 
-    if (oauth->cache_file == NULL) 
+    if (oauth->args[CACHE_FILE] == NULL) 
         return NULL;
 
-    FILE *fp = fopen(oauth->cache_file, "w");
+    FILE *fp = fopen(oauth->args[CACHE_FILE], "w");
     if (fp == NULL) return NULL;
 
     for (linked_map_entry* entry = oauth->cache.head; entry; entry = entry->next) {

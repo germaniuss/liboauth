@@ -6,7 +6,58 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define OAUTH_VERSION "1.1.0"
+typedef enum PARAM {
+    SAVE_ON_OAUTH,
+    REFRESH_ON_OAUTH,
+    REFRESH_ON_LOAD,
+    CLIENT_ID,
+    CLIENT_SECRET,
+    CHALLENGE_METHOD,
+    REDIRECT_URI,
+    TOKEN_URL,
+    AUTH_URL, 
+    CONFIG_FILE,
+    CACHE_FILE,
+    REQUEST_TIMEOUT,
+    ACCESS_TOKEN,
+    TOKEN_BEARER,
+    REFRESH_TOKEN,
+    CODE_CHALLENGE,
+    CODE_VERIFIER
+} PARAM;
+
+static const char* PARAM_STRING[] = {
+    "save_on_auth",
+    "refresh_on_auth",
+    "refresh_on_load",
+    "client_id",
+    "client_secret",
+    "challenge_method",
+    "redirect_uri",
+    "token_url",
+    "auth_url", 
+    "config_file",
+    "cache_file",
+    "request_timeout",
+    "access_token",
+    "token_bearer",
+    "refresh_token",
+    "code_challenge",
+    "code_verifier"
+};
+
+// THE OPTIONS MAY BE CHANGED TEMPORARILY FOR A REQUEST
+typedef enum OPTION {
+    REQUEST_CACHE = 1, 
+    REQUEST_ASYNC = 2,
+    REQUEST_AUTH = 4
+} OPTION;
+
+static const char* OPTION_STRING[] = {
+    "request_cache",
+    "request_async",
+    "request_auth"
+};
 
 typedef enum REQUEST {
     POST, PUT, GET, PATCH, DEL
@@ -35,11 +86,12 @@ bool oauth_stop_refresh(OAuth* oauth);
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value);
 void oauth_append_data(OAuth* oauth, const char* key, const char* value);
-void oauth_set_param(OAuth* oauth, const char* key, char* value);
+void oauth_set_param(OAuth* oauth, PARAM param, char* value);
+bool oauth_set_options(OAuth* oauth, uint8_t options);
 
 void oauth_start_request_thread(OAuth* oauth);
 void oauth_stop_request_thread(OAuth* oauth);
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint, bool cache, bool auth);
+response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint);
 
 void oauth_config_dir(OAuth* oauth, const char* dir, const char* name);
 void oauth_cache_dir(OAuth* oauth, const char* dir, const char* name);

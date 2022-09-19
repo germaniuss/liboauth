@@ -8,11 +8,21 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
-#include "map.h"
+
+typedef struct ini_entry {
+	const char* key;
+	const char* value;
+} ini_entry;
+
+typedef struct ini_section {
+	const char* name;
+	ini_entry entries[32];
+	uint32_t size;
+} ini_section;
 
 typedef struct ini {
-	struct map_s64 sections;
-	struct map_str params[64];
+	const char* filename;
+	ini_section sections[32];
 	uint32_t size;
 } ini;
 
@@ -52,14 +62,9 @@ int ini_parse_file(void *arg, ini_on_item on_item, const char *filename);
  */
 int ini_parse_string(void *arg, ini_on_item on_item, const char *str);
 
-void ini_init(ini* i);
-
-char* ini_get(ini* i, const char* section, const char* key);
-void ini_put(ini* i, const char* section, const char* key, const char* value);
-void ini_del(ini* i, const char* section, const char* key);
-
-int ini_load(ini* i, const char* filename);
-int ini_save(ini* i, const char* filename);
+bool ini_open(ini* arg, const char* filename);
+bool ini_save(ini* arg, const char* section, const char* key, const char* value);
+bool ini_close(ini* arg);
 
 #ifdef __cplusplus
 }
@@ -74,71 +79,50 @@ int ini_save(ini* i, const char* filename);
 #pragma warning(disable : 4996)
 #endif
 
-static int ini_default_parse_fn(ini* i, int line, const char *section, const char* key, const char *value) {
-	uint32_t index = map_get_s64(&i->sections, section);
-	if (!i->sections.found) {
-		index = i->size;
-		map_put_s64(&i->sections, strdup(section), index);
-		i->size++;
-	} map_put_str(&i->params[index], strdup(key), strdup(value));
+static int ini_default_fn(ini *arg, int line, const char *section, const char *key, const char *value) {
+	uint32_t index;
+	
+	if (!arg->size || 
+		!section[0] || 
+		strcmp(arg->sections[arg->size - 1].name, section)
+	) {
+		if (arg->size == 32) return 1;
+		index = arg->size++;
+		arg->sections[index].name = strdup(section);
+		arg->sections[index].size = 0;
+	} else index = arg->size - 1;
+
+	ini_section* ini_sec = &arg->sections[index];
+	if (ini_sec->size == 32) return 1;
+	index = ini_sec->size++;
+	ini_sec->entries[index].key = strdup(key);
+	ini_sec->entries[index].value = strdup(value);
+	return 0;
 }
 
-void ini_init(ini* i) {
-	map_init_s64(&i->sections, 0, 0);
-	for (uint32_t index = 0; index < 64; index++) {
-		map_init_str(&i->params[index], 0, 0);
-	} i->size = 0;
-}
-
-void ini_del(ini* i, const char* section, const char* key) {
-	uint32_t index = map_get_s64(&i->sections, section);
-	if (!i->sections.found) return;
-
-	map_del_str(&i->params[index], key);
-	i->size--;
-
-	if (i->params[index].size == 0) {
-		map_term_str(&i->params[index]);
-		map_del_s64(&i->sections, section);
-	}
-
-	if (i->sections.size == 0) {
-		map_term_s64(&i->sections);
-	}
-}
-
-char* ini_get(ini* i, const char* section, const char* key) {
-	uint32_t index = map_get_s64(&i->sections, section);
-	if (!i->sections.found) return NULL;
-	char* val = map_get_str(&i->params[index], key);
-	return val;
-}
-
-void ini_put(ini* i, const char* section, const char* key, const char* value) {
-	ini_default_parse_fn(i, NULL, section, key, value);
-}
-
-int ini_load(ini* i, const char* filename) {
-	map_term_s64(&i->sections);
-	for (uint32_t index = 0; index < i->size; index++) {
-		map_term_sv(&i->params[index]);
-	} i->size = 0;
-	ini_parse_file(i, ini_default_parse_fn, filename);
-	return 1;
-}
-
-int ini_save(ini* i, const char* filename) {
+bool ini_open(ini* arg, const char* filename) {
+	arg->filename = strdup(filename);
+	arg->size = 0;
 	if (filename == NULL) 
         return NULL;
+	return ini_parse_file(arg, ini_default_fn, filename);
+}
 
-    uint32_t index; char* section; char* key; char* value;
-    FILE *fp = fopen(filename, "w");
+bool ini_close(ini* arg) {
+	
+	if (!arg->filename) {
+		return NULL;
+	}
+
+    FILE *fp = fopen(arg->filename, "w");
     if (fp == NULL) return NULL;
 
-	map_foreach(&i->sections, section, index) {
-		fprintf(fp, "\n[%s]\n", section);
-		map_foreach(&i->params[index], key, value) {
-			fprintf(fp, "%s=%s\n", key, value);
+	ini_section* sec;
+    for (uint32_t i = 0; i < arg->size; i++) {
+		sec = &arg->sections[i];
+		if (sec->name[0]) fprintf(fp, "\n[%s]\n", sec->name);
+		for (uint32_t j = 0; j < sec->size; j++) {
+			fprintf(fp, "%s = %s\n", sec->entries[j].key, sec->entries[j].value);
 		}
 	}
         
@@ -146,6 +130,60 @@ int ini_save(ini* i, const char* filename) {
     fclose(fp);
     return 1;
 }
+
+bool ini_save(ini* arg, const char* section, const char* key, const char* value) {
+	if (!section || !key || !value) {
+		return NULL;
+	}
+	
+	bool found;
+	uint32_t i;
+
+	// Find section if exists
+	found = false;
+	for (i = 0; i < arg->size && !found; i++) {
+		if (!strcmp(arg->sections[i].name, section)) {
+			found = true;
+			break;
+		}
+	}
+
+	if (i == 32) return 0;
+
+	// If not found then add the section and return
+	ini_section* sec = &arg->sections[i];
+	if (!found) {
+		sec->name = strdup(section);
+		sec->size = 1;
+		sec->entries[0].key = strdup(key);
+		sec->entries[0].value = strdup(value);
+		return 1;
+	}
+
+	// If found then find entry if exists
+	found = false;
+	for (i = 0; i < sec->size && !found; i++) {
+		if (!strcmp(sec->entries[i].key, key)) {
+			found = true;
+			break;
+		}
+	}
+
+	if (i == 32) return 0;
+
+	// If not found create entry, else update it
+	ini_entry* ent = &sec->entries[i];
+	if (!found) {
+		ent->key = strdup(key);
+		ent->value = strdup(value);
+		return 1;
+	}
+
+	if (strcmp(ent->value, value)) {
+		ent->value = strdup(value);
+	} return 1;
+}
+
 
 static char *trim_space(char *str)
 {

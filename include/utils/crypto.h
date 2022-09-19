@@ -1,5 +1,5 @@
-#ifndef _UTILS_SHA_256_H
-#define _UTILS_SHA_256_H
+#ifndef _UTILS_CRYPTO_H
+#define _UTILS_CRYPTO_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,7 +102,7 @@ uint8_t *sha_256_close(struct Sha_256 *sha_256);
 }
 #endif
 
-#if defined(_UTILS_IMPL) || defined(_UTILS_SHA_256_IMPL)
+#if defined(_UTILS_IMPL) || defined(_UTILS_CRYPTO_IMPL)
 
 #define TOTAL_LEN_LEN 8
 
