@@ -35,10 +35,9 @@ application/json (AKA XML)
 ### Contributing
 
 Any contribution is welcome and should be done through a pull request. Currently
-help is mostly needed with request error handling and documentation. I also would
-like to rewrite all libraries used as single header files. They would be based on 
-the libraries provided by Ozan Tezcan (see credit). But as single header files so
-they can be putin the include folder in any project.
+help is mostly needed with documentation and general bugfixing. Also standarization
+and cleanup of [libutils](https://github.com/germaniuss/libschemehandler) would be
+nice.
 
 ### Credit
 
