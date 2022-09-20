@@ -1,6 +1,10 @@
 #ifndef _UTILS_LINKED_MAP_H
 #define _UTILS_LINKED_MAP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define LINKED_MAP_MIN_LOAD 0.2f
 #define LINKED_MAP_MAX_LOAD 0.95f
 #define LINKED_MAP_DEFAULT_LOAD 0.75f
@@ -13,6 +17,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "hash.h"
+
+typedef struct linked_map_config { 
+	uint32_t (*hash_fn)(void *);
+	bool (*cmp)(struct linked_map_entry *, void *, uint32_t);
+} linked_map_config;
 
 typedef struct linked_map_entry {
 	void *key;
@@ -39,6 +48,28 @@ typedef struct linked_map {
 	uint32_t (*hash_fn)(void *);
 	bool (*cmp)(void *, void *);
 } linked_map;
+
+bool linked_map_init(linked_map *m, uint32_t max_size, uint32_t cap, float load, bool reload, bool cicular, linked_map_config *funcs);
+
+void linked_map_clear(linked_map *m);
+
+void linked_map_term(linked_map *m);
+
+void *linked_map_put(linked_map *m, void *K, void *V);
+
+void *linked_map_get(linked_map *m, void *key);
+
+void *linked_map_del(linked_map *m, void *key);
+
+static const linked_map_config linked_map_config_32 = {hash_32, cmp_int};
+static const linked_map_config linked_map_config_64 = {hash_64, cmp_int};
+static const linked_map_config linked_map_config_str = {murmurhash, cmp_str};
+
+#ifdef __cplusplus
+}
+#endif
+
+#if defined(_UTILS_IMPL) || defined(_UTILS_LINKED_MAP_IMPL)
 
 void linked_map_entry_ommit(linked_map *m, linked_map_entry* entry) {
 	uint32_t index = m->hash_fn(entry->key) & (m->cap - 1);
@@ -124,12 +155,7 @@ bool linked_map_remap(linked_map *m)
 	return true;
 }
 
-static inline bool linked_map_init(
-	linked_map *m, uint32_t max_size, uint32_t cap, float load, bool reload, bool cicular,
-	struct {
-		uint32_t (*hash_fn)(void *);
-		bool (*cmp)(linked_map_entry *, void *, uint32_t);
-	}* funcs)
+bool linked_map_init(linked_map *m, uint32_t max_size, uint32_t cap, float load, bool reload, bool cicular, linked_map_config *funcs)
 {
 	float f = (load < LINKED_MAP_MIN_LOAD || load > LINKED_MAP_MAX_LOAD) ? LINKED_MAP_DEFAULT_LOAD : load;
 	cap = cap < 16 ? 16 : cap;
@@ -176,7 +202,7 @@ static inline bool linked_map_init(
 	return true;
 }
 
-static inline void linked_map_clear(linked_map *m)
+void linked_map_clear(linked_map *m)
 {
 	if (!m) {
 		return;
@@ -187,7 +213,7 @@ static inline void linked_map_clear(linked_map *m)
 	}
 }
 
-static inline void linked_map_term(linked_map *m) 
+void linked_map_term(linked_map *m) 
 {
 	if (!m) {
 		return;
@@ -197,7 +223,7 @@ static inline void linked_map_term(linked_map *m)
 	free(m->mem);
 }
 
-static inline void *linked_map_put(linked_map *m, void *K, void *V)
+void *linked_map_put(linked_map *m, void *K, void *V)
 {
 	if (!m) {
 		return NULL;
@@ -229,7 +255,7 @@ static inline void *linked_map_put(linked_map *m, void *K, void *V)
 	linked_map_entry_add(m, entry);
 }
 
-static inline void *linked_map_get(linked_map *m, void *key)
+void *linked_map_get(linked_map *m, void *key)
 {
 	uint32_t index;
     linked_map_entry* entry;
@@ -255,7 +281,7 @@ static inline void *linked_map_get(linked_map *m, void *key)
     return NULL;
 }
 
-static inline void *linked_map_del(linked_map *m, void *key)
+void *linked_map_del(linked_map *m, void *key)
 {
 	uint32_t index;
 	linked_map_entry* entry;
@@ -276,14 +302,5 @@ static inline void *linked_map_del(linked_map *m, void *key)
 	}
 }
 
-#define linked_map_def(name, h, c)                                  \
-	struct {                                                           \
-		uint32_t (*hash_fn)(void *);                                   \
-		bool (*cmp)(struct linked_map_entry *, void *, uint32_t);    \
-	} linked_map_config_##name = {h, c};
-
-linked_map_def(32, hash_32, cmp_int);
-linked_map_def(64, hash_64, cmp_int);
-linked_map_def(str, murmurhash, cmp_str);
-
+#endif
 #endif

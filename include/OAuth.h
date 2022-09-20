@@ -1,6 +1,18 @@
 #ifndef OAUTH_H
 #define OAUTH_H
 
+#include <utils/crypto.h>
+#include <utils/str.h>
+#include <utils/time.h>
+#include <utils/json.h>
+#include <utils/ini.h>
+#include <utils/sorted_map.h>
+#include <utils/mutex.h>
+#include <utils/thread.h>
+#include <utils/linked_map.h>
+#include <utils/timer.h>
+#include <utils/path.h>
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>

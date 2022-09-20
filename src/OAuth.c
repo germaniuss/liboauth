@@ -1,18 +1,5 @@
-#define _UTILS_IMPL
-#include <utils/crypto.h>
-#include <utils/str.h>
-#include <utils/time.h>
-#include <utils/json.h>
-#include <utils/ini.h>
-#include <utils/sorted_map.h>
-#include <utils/mutex.h>
-#include <utils/thread.h>
-#include <utils/linked_map.h>
-#include <utils/timer.h>
-#include <utils/path.h>
-
 #include <curl/curl.h>
-#include "OAuth.h"
+#include <OAuth.h>
 
 #define MAX_BUFFER 2048 //4KB Buffers
 #define BIT(NUM, N) ((NUM) & (N))

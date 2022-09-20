@@ -1,4 +1,5 @@
-#include "OAuth.h";
+#define _UTILS_IMPL
+#include <OAuth.h>;
 
 int main(void) {
 
