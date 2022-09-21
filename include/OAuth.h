@@ -20,8 +20,10 @@
 
 typedef enum PARAM {
     SAVE_ON_OAUTH,
+    SAVE_ON_CLOSE,
     REFRESH_ON_OAUTH,
     REFRESH_ON_LOAD,
+    REQUEST_ON_LOAD,
     CLIENT_ID,
     CLIENT_SECRET,
     CHALLENGE_METHOD,
@@ -40,8 +42,10 @@ typedef enum PARAM {
 
 static const char* PARAM_STRING[] = {
     "save_on_auth",
+    "save_on_close",
     "refresh_on_auth",
     "refresh_on_load",
+    "request_on_load",
     "client_id",
     "client_secret",
     "challenge_method",
@@ -87,7 +91,7 @@ typedef struct response_data {
 
 typedef struct OAuth OAuth;
 
-OAuth* oauth_create();
+OAuth* oauth_create(const char* config_file);
 void oauth_delete(OAuth* oauth);
 
 char* oauth_auth_url(OAuth* oauth);
@@ -105,8 +109,6 @@ void oauth_start_request_thread(OAuth* oauth);
 void oauth_stop_request_thread(OAuth* oauth);
 response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint);
 
-void oauth_config_dir(OAuth* oauth, const char* dir, const char* name);
-void oauth_cache_dir(OAuth* oauth, const char* dir, const char* name);
 bool oauth_load(OAuth* oauth);
 bool oauth_save(OAuth* oauth);
 

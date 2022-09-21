@@ -3,7 +3,7 @@
 
 int main(void) {
 
-    OAuth* oauth = oauth_create();
+    OAuth* oauth = oauth_create(NULL);
     oauth_config_dir(oauth, "", "TEST");
     oauth_cache_dir(oauth, "", "TEST");
     oauth_load(oauth);

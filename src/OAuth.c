@@ -6,7 +6,7 @@
 
 typedef struct OAuth {
     bool authed;
-    char* args[17];
+    char* args[19];
     struct curl_slist* header_slist;
     uint8_t default_options;
     uint8_t current_options;
@@ -144,7 +144,7 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, process_response);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, storage);
               
-        /* Now specify the POST/DELETE/PUT/PATCH data */
+        /* Now specify the POST/DELETE/PUT/ data */
         if (method != GET) { 
             curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, REQUEST_STRING[method]);
             curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, data);
@@ -181,8 +181,8 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
     return response;
 }
 
-OAuth* oauth_create() {
-    OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));
+OAuth* oauth_create(const char* config_file) {
+    OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));        
     oauth->authed = false;
     oauth->request_run = false;
     linked_map_init(&oauth->request_queue, 200, 0, 0.0, false, false, &linked_map_config_str);
@@ -190,10 +190,19 @@ OAuth* oauth_create() {
     mutex_init(&oauth->request_mutex);
     oauth->data = NULL;
     oauth->header_slist = NULL;
+
+    if (config_file) {
+        oauth_set_param(oauth, CONFIG_FILE, config_file);
+        oauth_load(oauth);
+    }
+    
     return oauth;
 }
 
 void oauth_delete(OAuth* oauth) {
+    oauth_stop_request_thread(oauth);
+    if (oauth->args[SAVE_ON_CLOSE])
+        oauth_save(oauth);
     linked_map_term(&oauth->request_queue);
     linked_map_term(&oauth->cache);
     mutex_term(&oauth->request_mutex);
@@ -234,6 +243,7 @@ void* oauth_refresh_task(void* in) {
 
     oauth_set_options(oauth, 0);
     response_data* response = oauth_request(oauth, POST, oauth->args[TOKEN_URL]);
+
     if (response && response->response_code == 200) {
         oauth_parse_auth(oauth, response);
         free(response);
@@ -319,11 +329,22 @@ void oauth_auth(OAuth* oauth, const char* code) {
     response_data* response = oauth_post_token(oauth, code);
     if (response && response->response_code == 200) {
         oauth_parse_auth(oauth, response);
-        free(response);
-    }
+    } free(response);
 }
 
 void oauth_set_param(OAuth* oauth, PARAM param, char* value) {
+    if (!value || !*value)
+        return;
+
+    if ((param == CONFIG_FILE || param == CACHE_FILE) && *value == '.') {
+        char* dir = getexecdir();
+        char* new_value = strdup(value);
+        strtok(new_value, "/");
+        path_add(&dir, strtok(NULL, "/"));
+        value = dir;
+        free(new_value);
+    }
+
     oauth->args[param] = value;
 }
 
@@ -412,20 +433,6 @@ response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint)
     return response;
 }
 
-void oauth_config_dir(OAuth* oauth, const char* dir, const char* name) {
-    oauth->args[CONFIG_FILE] = getexecdir();
-    path_add(&oauth->args[CONFIG_FILE], dir);
-    path_add(&oauth->args[CONFIG_FILE], name);
-    str_append(&oauth->args[CONFIG_FILE], ".ini");
-}
-
-void oauth_cache_dir(OAuth* oauth, const char* dir, const char* name) {
-    oauth->args[CACHE_FILE] = getexecdir();
-    path_add(&oauth->args[CACHE_FILE], dir);
-    path_add(&oauth->args[CACHE_FILE], name);
-    str_append(&oauth->args[CACHE_FILE], ".cache");
-}
-
 int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *key, const char *value) {
     uint32_t i;
 
@@ -436,9 +443,9 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
     }
 
     if (!strcmp("Params", section)) {
-        for (i = 0; i < 15; i++) {
+        for (i = 0; i < 17; i++) {
             if (!strcmp(PARAM_STRING[i], key)) {
-                oauth->args[i] = strdup(value);
+                oauth_set_param(oauth, i, strdup(value));
                 break;
             }
         } return 0;
@@ -483,6 +490,7 @@ bool oauth_load_cache(OAuth* oauth) {
         const char* key = strtok(line, " ");
         const char* val = strtok(NULL, "");
         response_data* response = malloc(sizeof(response_data));
+        response->content_type = strdup("unknown");
         response->data = strdup(val);
         response->response_code = 200;
         linked_map_put(&oauth->cache, strdup(key), response);
@@ -496,6 +504,13 @@ bool oauth_load_cache(OAuth* oauth) {
 bool oauth_load(OAuth* oauth) {
     oauth_load_config(oauth);
     oauth_load_cache(oauth);
+
+    if (oauth->args[REFRESH_ON_LOAD])
+        oauth_start_refresh(oauth, 0);
+
+    if (oauth->args[REQUEST_ON_LOAD])
+        oauth_start_request_thread(oauth);
+
     return oauth->authed;
 }
 
