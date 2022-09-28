@@ -182,7 +182,7 @@ response_data* request(REQUEST method, const char* endpoint, struct curl_slist* 
 }
 
 OAuth* oauth_create(const char* config_file) {
-    OAuth* oauth = (OAuth*) malloc(sizeof(OAuth));        
+    OAuth* oauth = (OAuth*) calloc(1, sizeof(OAuth));       
     oauth->authed = false;
     oauth->request_run = false;
     linked_map_init(&oauth->request_queue, 200, 0, 0.0, false, false, &linked_map_config_str);
@@ -192,7 +192,7 @@ OAuth* oauth_create(const char* config_file) {
     oauth->header_slist = NULL;
 
     if (config_file) {
-        oauth_set_param(oauth, CONFIG_FILE, config_file);
+        oauth->args[CONFIG_FILE] = strdup(config_file);
         oauth_load(oauth);
     }
     
@@ -333,18 +333,6 @@ void oauth_auth(OAuth* oauth, const char* code) {
 }
 
 void oauth_set_param(OAuth* oauth, PARAM param, char* value) {
-    if (!value || !*value)
-        return;
-
-    if ((param == CONFIG_FILE || param == CACHE_FILE) && *value == '.') {
-        char* dir = getexecdir();
-        char* new_value = strdup(value);
-        strtok(new_value, "/");
-        path_add(&dir, strtok(NULL, "/"));
-        value = dir;
-        free(new_value);
-    }
-
     oauth->args[param] = value;
 }
 
@@ -443,9 +431,9 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
     }
 
     if (!strcmp("Params", section)) {
-        for (i = 0; i < 17; i++) {
+        for (i = 0; i < 19; i++) {
             if (!strcmp(PARAM_STRING[i], key)) {
-                oauth_set_param(oauth, i, strdup(value));
+                oauth->args[i] = strdup(value);
                 break;
             }
         } return 0;
@@ -469,7 +457,8 @@ bool oauth_load_config(OAuth* oauth) {
     if (oauth->args[CONFIG_FILE] == NULL)
         return NULL;
 
-    return !ini_parse_file(oauth, oauth_process_ini, oauth->args[CONFIG_FILE]);
+    char* dir = getfullpath(oauth->args[CONFIG_FILE]);
+    return !ini_parse_file(oauth, oauth_process_ini, dir);
 }
 
 bool oauth_load_cache(OAuth* oauth) {
@@ -481,7 +470,9 @@ bool oauth_load_cache(OAuth* oauth) {
     size_t len = 0;
     ssize_t read;
 
-    if (!(fp = fopen(oauth->args[CACHE_FILE], "r"))) {
+    char* dir = getfullpath(oauth->args[CACHE_FILE]);
+
+    if (!(fp = fopen(dir, "r"))) {
         return NULL;
     }
 
@@ -515,8 +506,14 @@ bool oauth_load(OAuth* oauth) {
 }
 
 bool oauth_save_config(OAuth* oauth) {
+    
+    if (oauth->args[CONFIG_FILE] == NULL) 
+        return NULL;
+    
+    char* dir = getfullpath(oauth->args[CONFIG_FILE]);
+
     ini aux;
-    ini_open(&aux, oauth->args[CONFIG_FILE]);
+    ini_open(&aux, dir);
 
     // for every value in params save
     for (uint32_t i = 0; i < 15; i++) {
@@ -545,11 +542,18 @@ bool oauth_save_cache(OAuth* oauth) {
     if (oauth->args[CACHE_FILE] == NULL) 
         return NULL;
 
-    FILE *fp = fopen(oauth->args[CACHE_FILE], "w");
+    char* dir = getfullpath(oauth->args[CACHE_FILE]);
+
+    FILE *fp = fopen(dir, "w");
     if (fp == NULL) return NULL;
 
-    for (linked_map_entry* entry = oauth->cache.head; entry; entry = entry->next) {
-        fprintf(fp, "%s %s\n", entry->key, ((response_data*) entry->value)->data);
+    linked_map_entry* entry = oauth->cache.head;
+    if (entry) {
+        fprintf(fp, "%s %s", entry->key, ((response_data*) entry->value)->data);
+    }
+
+    for (entry = entry->next; entry; entry = entry->next) {
+        fprintf(fp, "\n%s %s", entry->key, ((response_data*) entry->value)->data);
     }
         
     // close the file

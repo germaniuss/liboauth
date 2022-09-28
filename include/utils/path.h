@@ -15,6 +15,7 @@ extern "C" {
 char* getexecname();
 char* getexecdir();
 char* getcurrentdir();
+char* getfullpath(const char* filename);
 void path_add(char** path, const char* dir);
 
 #ifdef __cplusplus
