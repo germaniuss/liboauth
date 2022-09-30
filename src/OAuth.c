@@ -6,7 +6,7 @@
 
 typedef struct OAuth {
     bool authed;
-    char* args[19];
+    char* args[NUM_PARAMS];
     struct curl_slist* header_slist;
     uint8_t default_options;
     uint8_t current_options;
@@ -210,6 +210,7 @@ void oauth_delete(OAuth* oauth) {
     if (oauth->args[CODE_CHALLENGE]) str_destroy(&oauth->args[CODE_CHALLENGE]);
     if (oauth->args[CODE_VERIFIER]) str_destroy(&oauth->args[CODE_VERIFIER]);
     if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
+    free(oauth);
 }
 
 void* oauth_parse_auth(OAuth* oauth, response_data* response) {
@@ -431,7 +432,7 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
     }
 
     if (!strcmp("Params", section)) {
-        for (i = 0; i < 19; i++) {
+        for (i = 0; i < NUM_PARAMS; i++) {
             if (!strcmp(PARAM_STRING[i], key)) {
                 oauth->args[i] = strdup(value);
                 break;
@@ -501,6 +502,12 @@ bool oauth_load(OAuth* oauth) {
 
     if (oauth->args[REQUEST_ON_LOAD])
         oauth_start_request_thread(oauth);
+
+    if (oauth->args[REQUEST_QUEUE_SIZE]) 
+        linked_map_set_max_size(&oauth->request_queue, strtol(oauth->args[REQUEST_QUEUE_SIZE], NULL, 10));
+
+    if (oauth->args[CACHE_SIZE]) 
+        linked_map_set_max_size(&oauth->cache, strtol(oauth->args[CACHE_SIZE], NULL, 10));
 
     return oauth->authed;
 }

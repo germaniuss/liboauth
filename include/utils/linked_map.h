@@ -55,6 +55,8 @@ void linked_map_clear(linked_map *m);
 
 void linked_map_term(linked_map *m);
 
+void linked_map_set_max_size(linked_map *m, uint32_t max_size);
+
 void *linked_map_put(linked_map *m, void *K, void *V);
 
 void *linked_map_get(linked_map *m, void *key);
@@ -70,6 +72,20 @@ static const linked_map_config linked_map_config_str = {murmurhash, cmp_str};
 #endif
 
 #if defined(_UTILS_IMPL) || defined(_UTILS_LINKED_MAP_IMPL)
+
+void linked_map_set_max_size(linked_map *m, uint32_t max_size) {
+	if (max_size > LINKED_MAP_MIN_CAPACITY * m->load_fac) {
+		max_size--;
+		max_size |= max_size >> 1;
+		max_size |= max_size >> 2;
+		max_size |= max_size >> 4;
+		max_size |= max_size >> 8;
+		max_size |= max_size >> 16;
+		max_size++;
+		max_size *= m->load_fac;
+	} else if (!max_size) max_size = UINT32_MAX;
+	m->max_size = max_size;
+}
 
 void linked_map_entry_ommit(linked_map *m, linked_map_entry* entry) {
 	uint32_t index = m->hash_fn(entry->key) & (m->cap - 1);

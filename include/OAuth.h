@@ -1,13 +1,12 @@
 #ifndef OAUTH_H
 #define OAUTH_H
 
-#include <utils/crypto.h>
+#include <utils/hash.h>
 #include <utils/str.h>
 #include <utils/time.h>
 #include <utils/json.h>
 #include <utils/ini.h>
 #include <utils/sorted_map.h>
-#include <utils/mutex.h>
 #include <utils/thread.h>
 #include <utils/linked_map.h>
 #include <utils/timer.h>
@@ -17,6 +16,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+#define NUM_PARAMS 21
 
 typedef enum PARAM {
     SAVE_ON_OAUTH,
@@ -37,7 +38,9 @@ typedef enum PARAM {
     TOKEN_BEARER,
     REFRESH_TOKEN,
     CODE_CHALLENGE,
-    CODE_VERIFIER
+    CODE_VERIFIER,
+    REQUEST_QUEUE_SIZE,
+    CACHE_SIZE
 } PARAM;
 
 static const char* PARAM_STRING[] = {
@@ -59,7 +62,9 @@ static const char* PARAM_STRING[] = {
     "token_bearer",
     "refresh_token",
     "code_challenge",
-    "code_verifier"
+    "code_verifier",
+    "request_queue_size",
+    "cache_size"
 };
 
 // THE OPTIONS MAY BE CHANGED TEMPORARILY FOR A REQUEST
