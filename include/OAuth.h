@@ -6,9 +6,9 @@
 #include <utils/time.h>
 #include <utils/json.h>
 #include <utils/ini.h>
-#include <utils/sorted_map.h>
 #include <utils/thread.h>
-#include <utils/linked_map.h>
+#include <utils/sorted_map.h>
+#include <utils/map.h>
 #include <utils/timer.h>
 #include <utils/path.h>
 
@@ -94,6 +94,14 @@ typedef struct response_data {
     long response_code;
 } response_data;
 
+typedef struct request_data {
+    const char* data;
+    struct curl_slist *header;
+    REQUEST method;
+    const char* endpoint;
+    const char* id;
+} request_data;
+
 typedef struct OAuth OAuth;
 
 OAuth* oauth_create(const char* config_file);
@@ -112,7 +120,7 @@ bool oauth_set_options(OAuth* oauth, uint8_t options);
 
 void oauth_start_request_thread(OAuth* oauth);
 void oauth_stop_request_thread(OAuth* oauth);
-response_data* oauth_request(OAuth* oauth, REQUEST method, const char* endpoint);
+response_data oauth_request(OAuth* oauth, REQUEST method, const char* endpoint);
 
 bool oauth_load(OAuth* oauth);
 bool oauth_save(OAuth* oauth);
