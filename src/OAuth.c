@@ -158,7 +158,7 @@ response_data request(REQUEST method, const char* endpoint, struct curl_slist* h
         curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &response.response_code);
         const char* content;
         curl_easy_getinfo (curl, CURLINFO_CONTENT_TYPE, &content);
-        response.content_type = strdup(content);
+        response.content_type = str_create(content);
 
         /* Check for errors */
         /* always cleanup */
@@ -186,7 +186,7 @@ OAuth* oauth_create(const char* config_file) {
     oauth->header_slist = NULL;
 
     if (config_file) {
-        oauth->args[CONFIG_FILE] = strdup(config_file);
+        oauth->args[CONFIG_FILE] = str_create(config_file);
         oauth_load(oauth);
     }
     
@@ -201,8 +201,11 @@ void oauth_delete(OAuth* oauth) {
     map_term_response(&oauth->cache);
     mutex_term(&oauth->request_mutex);
     if (oauth->data) sorted_map_free(oauth->data);
-    if (oauth->args[CODE_CHALLENGE]) str_destroy(&oauth->args[CODE_CHALLENGE]);
-    if (oauth->args[CODE_VERIFIER]) str_destroy(&oauth->args[CODE_VERIFIER]);
+
+    for (int i = 0; i < NUM_PARAMS; i++) {
+        if (oauth->args[i]) str_destroy(&oauth->args[i]);
+    }
+
     if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
     free(oauth);
 }
@@ -422,7 +425,7 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
     if (!strcmp("Params", section)) {
         for (i = 0; i < NUM_PARAMS; i++) {
             if (!strcmp(PARAM_STRING[i], key)) {
-                oauth->args[i] = strdup(value);
+                oauth->args[i] = str_create(value);
                 break;
             }
         } return 0;
@@ -470,10 +473,10 @@ bool oauth_load_cache(OAuth* oauth) {
         const char* key = strtok(line, " ");
         const char* val = strtok(NULL, "");
         response_data response;
-        response.content_type = strdup("unknown");
-        response.data = strdup(val);
+        response.content_type = str_create("unknown");
+        response.data = str_create(val);
         response.response_code = 200;
-        map_put_response(&oauth->cache, strdup(key), response);
+        map_put_response(&oauth->cache, str_create(key), response);
     }
 
     fclose(fp);
