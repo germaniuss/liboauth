@@ -433,7 +433,7 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
 
     if (!strcmp("Options", section)) {
         uint8_t val = 1;
-        for (i = 0; i < 3; i++) {
+        for (i = 0; i < NUM_OPTIONS; i++) {
             if (!strcmp(OPTION_STRING[i], key) && !strcmp(value, "true")) {
                 oauth->default_options |= val;
                 oauth->current_options = oauth->default_options;

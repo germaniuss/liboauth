@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #define NUM_PARAMS 21
+#define NUM_OPTIONS 5
 
 typedef enum PARAM {
     SAVE_ON_OAUTH,
@@ -71,13 +72,17 @@ static const char* PARAM_STRING[] = {
 typedef enum OPTION {
     REQUEST_CACHE = 1, 
     REQUEST_ASYNC = 2,
-    REQUEST_AUTH = 4
+    REQUEST_AUTH = 4,
+    REQUEST_QUEUE = 8,
+    REQUEST_SKIP = 16 
 } OPTION;
 
 static const char* OPTION_STRING[] = {
     "request_cache",
     "request_async",
-    "request_auth"
+    "request_auth",
+    "request_queue",
+    "request_skip"
 };
 
 typedef enum REQUEST {
