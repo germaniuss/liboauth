@@ -9,7 +9,6 @@
 #include <utils/thread.h>
 #include <utils/sorted_map.h>
 #include <utils/map.h>
-#include <utils/timer.h>
 #include <utils/path.h>
 
 #include <string.h>
@@ -18,6 +17,7 @@
 #include <stdint.h>
 
 #define NUM_PARAMS 21
+#define NUM_OPTIONS 5
 
 typedef enum PARAM {
     SAVE_ON_OAUTH,
@@ -71,13 +71,17 @@ static const char* PARAM_STRING[] = {
 typedef enum OPTION {
     REQUEST_CACHE = 1, 
     REQUEST_ASYNC = 2,
-    REQUEST_AUTH = 4
+    REQUEST_AUTH = 4,
+    REQUEST_QUEUE = 8,
+    REQUEST_SKIP = 16 
 } OPTION;
 
 static const char* OPTION_STRING[] = {
     "request_cache",
     "request_async",
-    "request_auth"
+    "request_auth",
+    "request_queue",
+    "request_skip"
 };
 
 typedef enum REQUEST {
@@ -94,14 +98,6 @@ typedef struct response_data {
     long response_code;
 } response_data;
 
-typedef struct request_data {
-    const char* data;
-    struct curl_slist *header;
-    REQUEST method;
-    const char* endpoint;
-    const char* id;
-} request_data;
-
 typedef struct OAuth OAuth;
 
 OAuth* oauth_create(const char* config_file);
@@ -110,16 +106,16 @@ void oauth_delete(OAuth* oauth);
 char* oauth_auth_url(OAuth* oauth);
 void oauth_auth(OAuth* oauth, const char* code);
 
-bool oauth_start_refresh(OAuth* oauth, uint64_t ms);
-bool oauth_stop_refresh(OAuth* oauth);
+bool oauth_start_refresh_timer(OAuth* oauth, uint64_t ms);
+bool oauth_stop_refresh_timer(OAuth* oauth);
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value);
 void oauth_append_data(OAuth* oauth, const char* key, const char* value);
 void oauth_set_param(OAuth* oauth, PARAM param, char* value);
 bool oauth_set_options(OAuth* oauth, uint8_t options);
 
-void oauth_start_request_thread(OAuth* oauth);
-void oauth_stop_request_thread(OAuth* oauth);
+void oauth_start_request_timer(OAuth* oauth);
+void oauth_stop_request_timer(OAuth* oauth);
 response_data oauth_request(OAuth* oauth, REQUEST method, const char* endpoint);
 
 bool oauth_load(OAuth* oauth);
