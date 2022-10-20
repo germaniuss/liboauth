@@ -1,6 +1,15 @@
 #include <curl/curl.h>
 #include <OAuth.h>
 
+typedef struct request_data {
+    uint8_t options;
+    const char* data;
+    struct curl_slist *header;
+    REQUEST method;
+    const char* endpoint;
+    const char* id;
+} request_data;
+
 #define MAX_BUFFER 2048 //4KB Buffers
 #define BIT(NUM, N) ((NUM) & (N))
 
@@ -11,17 +20,22 @@ map_def_strkey(response, const char*, response_data, cmp_str, murmurhash, {.data
 
 typedef struct OAuth {
     bool authed;
+    // All the default options are loaded here
     char* args[NUM_PARAMS];
-    struct curl_slist* header_slist;
     uint8_t default_options;
+    // There is all the data for a request
     uint8_t current_options;
-    sorted_map* data;
+    struct curl_slist* request_header;
+    sorted_map* request_data;
+    // Here is the response cache
     struct map_response cache;
+    // Here is the request queue functionality
+    int request_ms;
+    thread_timer_t request_timer;
     struct map_request request_queue;
-    bool request_run;
-    struct thread request_thread;
-    struct mutex request_mutex;
-    struct timer refresh_timer;
+    // Here is the refresh functionality
+    int refresh_ms;
+    thread_timer_t refresh_timer;
 } OAuth;
 
 typedef struct data_t {
@@ -173,17 +187,16 @@ response_data request(REQUEST method, const char* endpoint, struct curl_slist* h
 OAuth* oauth_create(const char* config_file) {
     OAuth* oauth = (OAuth*) calloc(1, sizeof(OAuth));       
     oauth->authed = false;
-    oauth->request_run = false;
+    thread_timer_init(&oauth->refresh_timer);
+    thread_timer_init(&oauth->request_timer);
     map_init_request(&oauth->request_queue, 0, 0);
     map_init_response(&oauth->cache, 0, 0);
     map_set_circular(&oauth->cache, true);
     map_set_refresh(&oauth->cache, true);
-    map_set_refresh(&oauth->request_queue, true);
     map_set_max_size(&oauth->request_queue, 200);
     map_set_max_size(&oauth->cache, 200);
-    mutex_init(&oauth->request_mutex);
-    oauth->data = NULL;
-    oauth->header_slist = NULL;
+    oauth->request_data = NULL;
+    oauth->request_header = NULL;
 
     if (config_file) {
         oauth->args[CONFIG_FILE] = str_create(config_file);
@@ -194,19 +207,18 @@ OAuth* oauth_create(const char* config_file) {
 }
 
 void oauth_delete(OAuth* oauth) {
-    oauth_stop_request_thread(oauth);
+    oauth_stop_request_timer(oauth);
     if (oauth->args[SAVE_ON_CLOSE])
         oauth_save(oauth);
     map_term_request(&oauth->request_queue);
     map_term_response(&oauth->cache);
-    mutex_term(&oauth->request_mutex);
-    if (oauth->data) sorted_map_free(oauth->data);
+    if (oauth->request_data) sorted_map_free(oauth->request_data);
 
     for (int i = 0; i < NUM_PARAMS; i++) {
         if (oauth->args[i]) str_destroy(&oauth->args[i]);
     }
 
-    if (oauth->header_slist) curl_slist_free_all(oauth->header_slist);
+    if (oauth->request_header) curl_slist_free_all(oauth->request_header);
     free(oauth);
 }
 
@@ -225,44 +237,6 @@ void* oauth_parse_auth(OAuth* oauth, response_data response) {
 
     if (oauth->args[REFRESH_ON_OAUTH])
         oauth_start_refresh(oauth, (json_value(json, "expires_in").integer * 2000)/3);
-}
-
-void* oauth_refresh_task(void* in) {
-    OAuth* oauth = (OAuth*) in;
-
-    if (!oauth->args[REFRESH_TOKEN] || !oauth->args[CLIENT_ID] || !oauth->args[TOKEN_URL])
-        return false;
-
-    oauth_append_data(oauth, "client_id", oauth->args[CLIENT_ID]);
-    oauth_append_data(oauth, "refresh_token", oauth->args[REFRESH_TOKEN]);
-    oauth_append_data(oauth, "grant_type", "refresh_token");
-    if (oauth->args[CLIENT_SECRET])
-        oauth_append_data(oauth, "client_secret", oauth->args[CLIENT_SECRET]);
-
-    oauth_set_options(oauth, 0);
-    response_data response = oauth_request(oauth, POST, oauth->args[TOKEN_URL]);
-
-    if (response.data && response.response_code == 200) {
-        oauth_parse_auth(oauth, response);
-    }
-}
-
-bool oauth_start_refresh(OAuth* oauth, uint64_t ms) {
-    if (!oauth->args[REFRESH_TOKEN] || !oauth->args[CLIENT_ID] || !oauth->args[TOKEN_URL])
-        return false;
-
-    if (ms == 0) {
-        oauth_refresh_task(oauth);
-        return true;
-    }
-
-    if (!oauth->refresh_timer.init) timer_init(&oauth->refresh_timer);
-    timer_start(&oauth->refresh_timer, ms, oauth_refresh_task, oauth);
-    return true;
-}
-
-bool oauth_stop_refresh(OAuth* oauth) {
-    timer_term(&oauth->refresh_timer);
 }
 
 bool oauth_gen_challenge(OAuth* oauth) {
@@ -341,75 +315,118 @@ bool oauth_set_options(OAuth* oauth, uint8_t options) {
 
 void oauth_append_header(OAuth* oauth, const char* key, const char* value) {
     char* val = str_create_fmt("%s:%s", key, value);
-    oauth->header_slist = curl_slist_append(oauth->header_slist, val);
+    oauth->request_header = curl_slist_append(oauth->request_header, val);
 }
 
 void oauth_append_data(OAuth* oauth, const char* key, const char* value) {
-    if (!oauth->data) oauth->data = sorted_map_alloc(strcmp);
-    sorted_map_put(oauth->data, key, value);
+    if (!oauth->request_data) oauth->request_data = sorted_map_alloc(strcmp);
+    sorted_map_put(oauth->request_data, key, value);
 }
 
-void* oauth_process_request(void* data) {
-    OAuth* oauth = (OAuth*) data;
-    while (oauth->request_run) {
-        while (oauth->request_queue.size == 0 && oauth->request_run);
-        if (!oauth->request_run) break;
-        mutex_lock(&oauth->request_mutex);
-        request_data rq_data = oauth->request_queue.head->entry->value;
-        map_del_request(&oauth->request_queue, rq_data.id);
-        response_data response = request(rq_data.method, rq_data.endpoint, rq_data.header, rq_data.data);
-        if (response.data && response.response_code == 200) {
-            map_put_response(&oauth->cache, rq_data.id, response);
-        }  
-        time_sleep(strtol(oauth->args[REQUEST_TIMEOUT], NULL, 10));
-        mutex_unlock(&oauth->request_mutex);
+void* oauth_refresh_task(OAuth* oauth) {
+    if (!oauth->args[REFRESH_TOKEN] || !oauth->args[CLIENT_ID] || !oauth->args[TOKEN_URL])
+        return false;
+
+    oauth_append_data(oauth, "client_id", oauth->args[CLIENT_ID]);
+    oauth_append_data(oauth, "refresh_token", oauth->args[REFRESH_TOKEN]);
+    oauth_append_data(oauth, "grant_type", "refresh_token");
+    if (oauth->args[CLIENT_SECRET])
+        oauth_append_data(oauth, "client_secret", oauth->args[CLIENT_SECRET]);
+
+    oauth_set_options(oauth, 0);
+    response_data response = oauth_request(oauth, POST, oauth->args[TOKEN_URL]);
+
+    if (response.data && response.response_code == 200) {
+        oauth_parse_auth(oauth, response);
     }
 }
 
-void oauth_start_request_thread(OAuth* oauth) {
-    oauth->request_run = true;
-    thread_init(&oauth->request_thread);
-    thread_start(&oauth->request_thread, oauth_process_request, oauth);
+bool oauth_start_refresh_timer(OAuth* oauth, uint64_t ms) {
+    if (!oauth->args[REFRESH_TOKEN] || !oauth->args[CLIENT_ID] || !oauth->args[TOKEN_URL])
+        return false;
+
+    if (ms == 0) {
+        oauth_refresh_task(oauth);
+        return true;
+    }
+
+    oauth->refresh_ms = ms;
+    thread_timer_start(&oauth->refresh_timer, &oauth->refresh_ms, true, oauth_refresh_task, oauth);
+    return true;
 }
 
-void oauth_stop_request_thread(OAuth* oauth) {
-    oauth->request_run = false;
-    thread_term(&oauth->request_thread);
+bool oauth_stop_refresh_timer(OAuth* oauth) {
+    thread_timer_term(&oauth->refresh_timer);
+}
+
+void* oauth_request_task(OAuth* oauth) {
+    // pop head from request_queue
+    request_data rq_data = oauth->request_queue.head->entry->value;
+    map_del_request(&oauth->request_queue, rq_data.id);
+    response_data response = request(rq_data.method, rq_data.endpoint, rq_data.header, rq_data.data);
+    if (response.data && response.response_code == 200) {
+        map_put_response(&oauth->cache, rq_data.id, response);
+    }
+}
+
+void oauth_start_request_timer(OAuth* oauth) {
+    oauth->request_ms = 0;
+    thread_timer_start(&oauth->request_timer, &oauth->request_ms, true, oauth_request_task, oauth);
+}
+
+void oauth_stop_request_timer(OAuth* oauth) {
+    thread_timer_term(&oauth->request_timer);
 }
 
 response_data oauth_request(OAuth* oauth, REQUEST method, const char* endpoint) {
-    uint8_t options = oauth->current_options;
+    // Prepare the request data
     request_data rq_data;
     rq_data.id = NULL;
-    rq_data.data = parse_data(oauth->data, "&");
+    rq_data.options = oauth->current_options;
+    rq_data.data = parse_data(oauth->request_data, "&");
     rq_data.endpoint = endpoint;
-    rq_data.header = oauth->header_slist;
+    rq_data.header = oauth->request_header;
     rq_data.method = method;
     str_append_fmt(&rq_data.id, "/%s/%s", REQUEST_STRING[method], endpoint);
     if (rq_data.data) str_append_fmt(&rq_data.id, "?%s", rq_data.data);
 
+    if (oauth->authed && BIT(oauth->current_options, REQUEST_AUTH)) {
+        const char* str = NULL;
+        str_append_fmt(&str, "Authorization: %s %s", oauth->args[TOKEN_BEARER], oauth->args[ACCESS_TOKEN]);
+        rq_data.header = curl_slist_append(rq_data.header, str);
+        str_destroy(&str);
+    }
+
+    // Free values for the next request
+    sorted_map_free(oauth->request_data);
+    oauth->current_options = oauth->default_options;
+    oauth->request_data = NULL;
+
+    // Get value if it is in the cache
     response_data response = map_get_response(&oauth->cache, rq_data.id);
-    if (BIT(options, REQUEST_CACHE) && !BIT(options, REQUEST_ASYNC) && (response.data)) {
-        if (!map_get_request(&oauth->request_queue, rq_data.id).id)
+
+    if (BIT(rq_data.options, REQUEST_QUEUE)) {
+
+        if (!BIT(rq_data.options, REQUEST_SKIP)) {
             map_put_request(&oauth->request_queue, rq_data.id, rq_data);
-    } else  {
-        if (oauth->authed && BIT(options, REQUEST_AUTH)) {
-            const char* str = NULL;
-            str_append_fmt(&str, "Authorization: %s %s", oauth->args[TOKEN_BEARER], oauth->args[ACCESS_TOKEN]);
-            rq_data.header = curl_slist_append(rq_data.header, str);
+        } else {
+            // put in first position
         }
 
-        if (!BIT(options, REQUEST_ASYNC)) mutex_lock(&oauth->request_mutex);
-        response = request(method, endpoint, rq_data.header, rq_data.data);
-        if (response.data && BIT(options, REQUEST_CACHE) && response.response_code == 200) {
-            map_put_response(&oauth->cache, rq_data.id, response);
-        } 
-        if (!BIT(options, REQUEST_ASYNC)) mutex_unlock(&oauth->request_mutex);
+        if (!BIT(rq_data.options, REQUEST_ASYNC)) {
+            // wait for request to be completed (unless response is not null and cache is set)
+        } else {
+            // do not wait for request to be completed
+        }
+
+        return response;
+    }
+
+    if (BIT(rq_data.options, REQUEST_ASYNC)) {
+        // execute the request 
+        return response;
     }
     
-    sorted_map_free(oauth->data);
-    oauth->current_options = oauth->default_options;
-    oauth->data = NULL;
     return response;
 }
 
@@ -418,7 +435,7 @@ int oauth_process_ini(OAuth *oauth, int line, const char *section, const char *k
 
     if (!strcmp("Header", section)) {
         char* val = str_create_fmt("%s:%s", key, value);
-        oauth->header_slist = curl_slist_append(oauth->header_slist, val);
+        oauth->request_header = curl_slist_append(oauth->request_header, val);
         return 0;
     }
 
@@ -520,7 +537,7 @@ bool oauth_save_config(OAuth* oauth) {
     
     // for every value in header save
     char* key; char* value;
-    struct curl_slist* ptr = oauth->header_slist;
+    struct curl_slist* ptr = oauth->request_header;
     while (ptr) {
         char* save = NULL;
         char* val = str_create(ptr->data);
